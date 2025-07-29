@@ -1,0 +1,411 @@
+<!-- templates/view_part.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ part.name }} - Detalhes da Peça{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-gear"></i> {{ part.name }}
+        <span class="badge {{ 'bg-success' if part.is_active else 'bg-secondary' }}">
+            {{ 'Ativa' if part.is_active else 'Inativa' }}
+        </span>
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manage_parts') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        {% if current_user.role == 'master' %}
+        <a href="{{ url_for('edit_part', id=part.id) }}" class="btn btn-primary ms-2">
+            <i class="bi bi-pencil"></i> Editar
+        </a>
+        {% endif %}
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-three-dots"></i> Ações
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('manage_stock') }}?part_id={{ part.id }}">
+                    <i class="bi bi-boxes"></i> Ver Estoque
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('generate_qr_codes') }}?part_id={{ part.id }}">
+                    <i class="bi bi-qr-code"></i> QR Codes
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('part_history', id=part.id) }}">
+                    <i class="bi bi-clock-history"></i> Histórico
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{{ url_for('reports') }}?part_id={{ part.id }}">
+                    <i class="bi bi-graph-up"></i> Relatórios
+                </a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Informações Principais -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <div class="avatar-xl bg-{{ 'primary' if part.category == 'Informática' else 'success' if part.category == 'Eletrônicos' else 'info' if part.category == 'Móveis' else 'warning' if part.category == 'Cabos' else 'secondary' }} text-white rounded d-flex align-items-center justify-content-center mx-auto mb-3">
+                    <i class="bi bi-{{ 'laptop' if part.category == 'Informática' else 'cpu' if part.category == 'Eletrônicos' else 'house' if part.category == 'Móveis' else 'ethernet' if part.category == 'Cabos' else 'gear' }}" style="font-size: 3rem;"></i>
+                </div>
+                <h4>{{ part.name }}</h4>
+                {% if part.description %}
+                <p class="text-muted">{{ part.description }}</p>
+                {% endif %}
+
+                <div class="row mt-3">
+                    <div class="col-6">
+                        {% if part.category %}
+                        <span class="badge bg-{{ 'primary' if part.category == 'Informática' else 'success' if part.category == 'Eletrônicos' else 'info' if part.category == 'Móveis' else 'warning' if part.category == 'Cabos' else 'secondary' }}">
+                            {{ part.category }}
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="col-6">
+                        <span class="badge bg-light text-dark">
+                            {{ part.unit_measure or 'unidade' }}
+                        </span>
+                    </div>
+                </div>
+
+                {% if part.part_number %}
+                <div class="mt-3">
+                    <small class="text-muted">Código:</small><br>
+                    <code class="bg-light p-2 rounded">{{ part.part_number }}</code>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- Estatísticas -->
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <div class="h3 mb-0">{{ total_stock }}</div>
+                        <small>Estoque Total</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <div class="h3 mb-0">{{ total_companies }}</div>
+                        <small>Empresas</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body text-center">
+                        <div class="h3 mb-0">{{ total_requests }}</div>
+                        <small>Solicitado</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3 mb-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body text-center">
+                        <div class="h3 mb-0">{{ total_sent }}</div>
+                        <small>Enviado</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações Detalhadas -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i> Detalhes
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-5">Nome:</dt>
+                            <dd class="col-sm-7">{{ part.name }}</dd>
+
+                            <dt class="col-sm-5">Categoria:</dt>
+                            <dd class="col-sm-7">
+                                {% if part.category %}
+                                <span class="badge bg-secondary">{{ part.category }}</span>
+                                {% else %}
+                                <span class="text-muted">Não definida</span>
+                                {% endif %}
+                            </dd>
+
+                            <dt class="col-sm-5">Código:</dt>
+                            <dd class="col-sm-7">
+                                {% if part.part_number %}
+                                <code>{{ part.part_number }}</code>
+                                {% else %}
+                                <span class="text-muted">Não definido</span>
+                                {% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-5">Unidade:</dt>
+                            <dd class="col-sm-7">{{ part.unit_measure or 'unidade' }}</dd>
+
+                            <dt class="col-sm-5">Status:</dt>
+                            <dd class="col-sm-7">
+                                <span class="badge {{ 'bg-success' if part.is_active else 'bg-secondary' }}">
+                                    {{ 'Ativa' if part.is_active else 'Inativa' }}
+                                </span>
+                            </dd>
+
+                            <dt class="col-sm-5">Criada em:</dt>
+                            <dd class="col-sm-7">{{ part.created_at.strftime('%d/%m/%Y às %H:%M') }}</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                {% if part.description %}
+                <hr>
+                <h6>Descrição:</h6>
+                <p class="text-muted">{{ part.description }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Estoque por Empresa -->
+{% if part.stocks %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-building"></i> Estoque por Empresa
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>Quantidade</th>
+                        <th>Estoque Mínimo</th>
+                        <th>Status</th>
+                        <th>Última Atualização</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for stock in part.stocks %}
+                    {% if current_user.role == 'master' or stock.company_id == current_user.company_id %}
+                    <tr>
+                        <td>
+                            <strong>{{ stock.company.name }}</strong>
+                        </td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if stock.quantity > stock.min_quantity else 'warning' if stock.quantity > 0 else 'danger' }} fs-6">
+                                {{ stock.quantity }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="text-muted">{{ stock.min_quantity }}</span>
+                        </td>
+                        <td>
+                            {% if stock.quantity <= stock.min_quantity %}
+                            <span class="badge bg-warning">
+                                <i class="bi bi-exclamation-triangle"></i> Baixo
+                            </span>
+                            {% elif stock.quantity == 0 %}
+                            <span class="badge bg-danger">
+                                <i class="bi bi-x-circle"></i> Esgotado
+                            </span>
+                            {% else %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Normal
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <small class="text-muted">
+                                {{ stock.last_updated.strftime('%d/%m/%Y %H:%M') }}
+                            </small>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('manage_stock') }}?company_id={{ stock.company_id }}&part_id={{ part.id }}"
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-boxes"></i> Gerenciar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Solicitações Recentes -->
+{% if recent_requests %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul"></i> Solicitações Recentes
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Solicitante</th>
+                        <th>Empresa</th>
+                        <th>Quantidade</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for request, request_item in recent_requests %}
+                    {% if current_user.role == 'master' or request.company_id == current_user.company_id %}
+                    <tr>
+                        <td>
+                            <strong>{{ request.created_at.strftime('%d/%m/%Y') }}</strong><br>
+                            <small class="text-muted">{{ request.created_at.strftime('%H:%M') }}</small>
+                        </td>
+                        <td>
+                            {{ request.requester.username }}
+                        </td>
+                        <td>
+                            {{ request.company.name }}
+                        </td>
+                        <td>
+                            <span class="badge bg-info">
+                                {{ request_item.quantity_requested }}
+                            </span>
+                        </td>
+                        <td>
+                            <span class="badge
+                                {% if request.status == 'pendente' %}bg-warning
+                                {% elif request.status == 'enviado' %}bg-primary
+                                {% elif request.status == 'recebido' %}bg-success
+                                {% else %}bg-secondary
+                                {% endif %}">
+                                {{ request.status|title }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('view_request', id=request.id) }}"
+                               class="btn btn-sm btn-outline-info">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="text-center">
+            <a href="{{ url_for('my_requests') }}?part_id={{ part.id }}" class="btn btn-outline-primary">
+                <i class="bi bi-list-ul"></i> Ver Todas as Solicitações
+            </a>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Instâncias Recentes -->
+{% if instances %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-qr-code"></i> Instâncias Recentes
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for instance in instances[:12] %}
+            {% if current_user.role == 'master' or instance.company_id == current_user.company_id %}
+            <div class="col-md-4 col-lg-3 mb-3">
+                <div class="card border-{{ 'success' if instance.status == 'em_estoque' else 'warning' if instance.status == 'enviado' else 'info' }}">
+                    <div class="card-body p-3">
+                        <div class="text-center">
+                            <small class="text-muted">{{ instance.company.name }}</small><br>
+                            <strong>{{ instance.unique_code }}</strong><br>
+                            <span class="badge bg-{{ 'success' if instance.status == 'em_estoque' else 'warning' if instance.status == 'enviado' else 'info' }}">
+                                {{ instance.status|title }}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+
+        {% if instances|length > 12 %}
+        <div class="text-center">
+            <a href="{{ url_for('generate_qr_codes') }}?part_id={{ part.id }}" class="btn btn-outline-primary">
+                <i class="bi bi-qr-code"></i> Ver Todas as Instâncias ({{ instances|length }})
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Gráfico de uso ao longo do tempo (placeholder)
+document.addEventListener('DOMContentLoaded', function() {
+    // Aqui você pode adicionar gráficos usando Chart.js ou similar
+    // para mostrar estatísticas de uso da peça ao longo do tempo
+});
+
+// Função para atualizar dados via AJAX
+function refreshStats() {
+    fetch(`/api/parts/{{ part.id }}/stock-summary`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Atualizar estatísticas em tempo real
+                console.log('Dados atualizados:', data);
+            }
+        })
+        .catch(error => console.error('Erro ao atualizar dados:', error));
+}
+
+// Atualizar dados a cada 30 segundos
+setInterval(refreshStats, 30000);
+</script>
+
+<style>
+.avatar-xl {
+    width: 120px;
+    height: 120px;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+dl.row dt {
+    font-weight: 600;
+    color: #6c757d;
+}
+
+.table td {
+    vertical-align: middle;
+}
+</style>
+
+{% endblock %}

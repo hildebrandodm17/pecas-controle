@@ -1,0 +1,421 @@
+<!-- templates/user_form.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if edit else 'Novo' }} Usuário{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-{{ 'pencil' if edit else 'person-plus' }}"></i>
+        {{ 'Editar' if edit else 'Novo' }} Usuário
+        {% if edit and user %}
+        <small class="text-muted">{{ user.username }}</small>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manage_users') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i> Informações do Usuário
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="userForm">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="username" class="form-label">
+                                    <i class="bi bi-person"></i> Nome de Usuário *
+                                </label>
+                                <input type="text"
+                                       class="form-control"
+                                       id="username"
+                                       name="username"
+                                       value="{{ user.username if edit else '' }}"
+                                       required
+                                       placeholder="Digite o nome de usuário">
+                                <div class="form-text">
+                                    Usado para fazer login no sistema
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="email" class="form-label">
+                                    <i class="bi bi-envelope"></i> Email *
+                                </label>
+                                <input type="email"
+                                       class="form-control"
+                                       id="email"
+                                       name="email"
+                                       value="{{ user.email if edit else '' }}"
+                                       required
+                                       placeholder="usuario@empresa.com">
+                                <div class="form-text">
+                                    Email válido para contato e recuperação
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="password" class="form-label">
+                                    <i class="bi bi-key"></i> Senha {% if edit %}(deixe vazio para manter){% else %}*{% endif %}
+                                </label>
+                                <div class="input-group">
+                                    <input type="password"
+                                           class="form-control"
+                                           id="password"
+                                           name="password"
+                                           {% if not edit %}required{% endif %}
+                                           placeholder="{% if edit %}Nova senha (opcional){% else %}Digite a senha{% endif %}">
+                                    <button class="btn btn-outline-secondary" type="button" onclick="togglePassword()">
+                                        <i class="bi bi-eye" id="passwordIcon"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    {% if edit %}
+                                    Deixe vazio para manter a senha atual
+                                    {% else %}
+                                    Mínimo 6 caracteres
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="role" class="form-label">
+                                    <i class="bi bi-shield-check"></i> Perfil de Acesso *
+                                </label>
+                                <select class="form-select" id="role" name="role" required onchange="handleRoleChange()">
+                                    <option value="">Selecione o perfil</option>
+                                    {% if current_user.role == 'master' %}
+                                    <option value="master"
+                                            {% if edit and user.role == 'master' %}selected{% endif %}>
+                                        Master - Acesso Total
+                                    </option>
+                                    {% endif %}
+                                    <option value="admin"
+                                            {% if edit and user.role == 'admin' %}selected{% endif %}>
+                                        Administrador - Gerencia Empresa
+                                    </option>
+                                    <option value="receptor"
+                                            {% if edit and user.role == 'receptor' %}selected{% endif %}>
+                                        Receptor - Controla Estoque
+                                    </option>
+                                    <option value="solicitante"
+                                            {% if edit and user.role == 'solicitante' %}selected{% endif %}>
+                                        Solicitante - Faz Pedidos
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if current_user.role == 'master' %}
+                    <div class="mb-3" id="companyField">
+                        <label for="company_id" class="form-label">
+                            <i class="bi bi-building"></i> Empresa
+                        </label>
+                        <select class="form-select" id="company_id" name="company_id">
+                            <option value="">Sistema (apenas para Master)</option>
+                            {% for company in companies %}
+                            <option value="{{ company.id }}"
+                                    {% if edit and user.company_id == company.id %}selected{% endif %}>
+                                {{ company.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Masters podem não ter empresa associada
+                        </div>
+                    </div>
+                    {% else %}
+                    <input type="hidden" name="company_id" value="{{ current_user.company_id }}">
+                    {% endif %}
+
+                    {% if edit %}
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="bi bi-info-circle"></i> Informações Adicionais
+                        </label>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Status</small><br>
+                                        <span class="badge {{ 'bg-success' if user.is_active else 'bg-secondary' }}">
+                                            {{ 'Ativo' if user.is_active else 'Inativo' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Criado em</small><br>
+                                        <strong>{{ user.created_at.strftime('%d/%m/%Y') }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Empresa</small><br>
+                                        <strong>{{ user.company.name if user.company else 'Sistema' }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('manage_users') }}" class="btn btn-secondary me-md-2">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-{{ 'check-circle' if edit else 'plus-circle' }}"></i>
+                            {{ 'Atualizar' if edit else 'Criar' }} Usuário
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Card de Ajuda -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-question-circle"></i> Perfis de Usuário
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    {% if current_user.role == 'master' %}
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="badge bg-danger me-2 mt-1">
+                            <i class="bi bi-crown"></i>
+                        </div>
+                        <div>
+                            <strong>Master</strong><br>
+                            <small class="text-muted">Acesso total ao sistema, gerencia todas as empresas e usuários</small>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="badge bg-primary me-2 mt-1">
+                            <i class="bi bi-shield"></i>
+                        </div>
+                        <div>
+                            <strong>Administrador</strong><br>
+                            <small class="text-muted">Gerencia sua empresa, usuários, equipamentos e locais</small>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-start mb-3">
+                        <div class="badge bg-info me-2 mt-1">
+                            <i class="bi bi-inbox"></i>
+                        </div>
+                        <div>
+                            <strong>Receptor</strong><br>
+                            <small class="text-muted">Controla estoque, envia peças e gera relatórios</small>
+                        </div>
+                    </div>
+
+                    <div class="d-flex align-items-start">
+                        <div class="badge bg-success me-2 mt-1">
+                            <i class="bi bi-person"></i>
+                        </div>
+                        <div>
+                            <strong>Solicitante</strong><br>
+                            <small class="text-muted">Faz solicitações de peças e acompanha pedidos</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Card de Dicas -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-lightbulb"></i> Dicas
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="bi bi-check2 text-success"></i>
+                        Use nomes de usuário únicos e fáceis de lembrar
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check2 text-success"></i>
+                        O email será usado para recuperação de senha
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check2 text-success"></i>
+                        {% if edit %}
+                        Deixe a senha vazia para manter a atual
+                        {% else %}
+                        Use senhas com pelo menos 6 caracteres
+                        {% endif %}
+                    </li>
+                    <li>
+                        <i class="bi bi-check2 text-success"></i>
+                        {% if current_user.role == 'master' %}
+                        Masters não precisam de empresa associada
+                        {% else %}
+                        Usuários serão vinculados à sua empresa
+                        {% endif %}
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        {% if edit %}
+        <!-- Card de Ações Rápidas -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-lightning"></i> Ações Rápidas
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    {% if user.id != current_user.id %}
+                    <button type="button" class="btn btn-outline-warning btn-sm" onclick="resetUserPassword()">
+                        <i class="bi bi-key"></i> Redefinir Senha
+                    </button>
+                    <button type="button" class="btn btn-outline-{{ 'success' if not user.is_active else 'warning' }} btn-sm" onclick="toggleUserStatus()">
+                        <i class="bi bi-{{ 'play' if not user.is_active else 'pause' }}"></i>
+                        {{ 'Ativar' if not user.is_active else 'Desativar' }}
+                    </button>
+                    {% endif %}
+                    {% if user.role in ['solicitante', 'receptor'] %}
+                    <a href="{{ url_for('my_requests') }}?user_id={{ user.id }}" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-list-ul"></i> Ver Solicitações
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Toggle visualização da senha
+function togglePassword() {
+    const passwordField = document.getElementById('password');
+    const passwordIcon = document.getElementById('passwordIcon');
+
+    if (passwordField.type === 'password') {
+        passwordField.type = 'text';
+        passwordIcon.className = 'bi bi-eye-slash';
+    } else {
+        passwordField.type = 'password';
+        passwordIcon.className = 'bi bi-eye';
+    }
+}
+
+// Gerenciar mudança de role
+function handleRoleChange() {
+    const roleSelect = document.getElementById('role');
+    const companyField = document.getElementById('companyField');
+    const companySelect = document.getElementById('company_id');
+
+    if (roleSelect.value === 'master' && companyField) {
+        companySelect.value = '';
+        companySelect.disabled = true;
+    } else if (companyField) {
+        companySelect.disabled = false;
+    }
+}
+
+// Validação do formulário
+document.getElementById('userForm').addEventListener('submit', function(e) {
+    const role = document.getElementById('role').value;
+    const companyId = document.getElementById('company_id')?.value;
+
+    // Verificar se role != master precisa de empresa (exceto se master estiver editando)
+    if (role !== 'master' && role !== '' && !companyId && {{ 'true' if current_user.role == 'master' else 'false' }}) {
+        e.preventDefault();
+        alert('Usuários que não são Master devem ter uma empresa associada!');
+        return false;
+    }
+
+    {% if not edit %}
+    // Verificar senha para novos usuários
+    const password = document.getElementById('password').value;
+    if (password.length < 6) {
+        e.preventDefault();
+        alert('A senha deve ter pelo menos 6 caracteres!');
+        return false;
+    }
+    {% endif %}
+});
+
+{% if edit %}
+// Funções para ações rápidas
+function resetUserPassword() {
+    if (confirm('Tem certeza que deseja redefinir a senha deste usuário?')) {
+        fetch(`/api/users/{{ user.id }}/reset-password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Nova senha: ${data.new_password}\n\nAnote esta senha e repasse ao usuário.`);
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => alert('Erro: ' + error));
+    }
+}
+
+function toggleUserStatus() {
+    const action = {{ 'true' if user.is_active else 'false' }} ? 'desativar' : 'ativar';
+
+    if (confirm(`Tem certeza que deseja ${action} este usuário?`)) {
+        fetch(`/api/users/{{ user.id }}/toggle-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => alert('Erro: ' + error));
+    }
+}
+{% endif %}
+
+// Inicializar estado do campo empresa
+document.addEventListener('DOMContentLoaded', function() {
+    handleRoleChange();
+});
+</script>
+
+{% endblock %}

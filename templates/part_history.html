@@ -1,0 +1,513 @@
+<!-- templates/part_history.html -->
+{% extends "base.html" %}
+
+{% block title %}Histórico - {{ part.name }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-clock-history"></i> Histórico - {{ part.name }}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('view_part', id=part.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-download"></i> Exportar
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="exportToPDF()">
+                    <i class="bi bi-file-pdf"></i> PDF
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="exportToCSV()">
+                    <i class="bi bi-file-csv"></i> CSV
+                </a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Resumo da Peça -->
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row align-items-center">
+            <div class="col-md-2 text-center">
+                <div class="avatar-lg bg-primary text-white rounded d-flex align-items-center justify-content-center mx-auto">
+                    <i class="bi bi-gear" style="font-size: 2rem;"></i>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h4 class="mb-1">{{ part.name }}</h4>
+                {% if part.description %}
+                <p class="text-muted mb-1">{{ part.description }}</p>
+                {% endif %}
+                <div>
+                    {% if part.category %}
+                    <span class="badge bg-primary me-2">{{ part.category }}</span>
+                    {% endif %}
+                    {% if part.part_number %}
+                    <code class="bg-light p-1 rounded">{{ part.part_number }}</code>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-primary">{{ requests_history|length }}</div>
+                        <small class="text-muted">Solicitações</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-success">{{ stock_movements|length }}</div>
+                        <small class="text-muted">Movimentos</small>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-info">{{ part.stocks|sum(attribute='quantity') }}</div>
+                        <small class="text-muted">Estoque</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h6 class="card-title mb-0">
+            <i class="bi bi-funnel"></i> Filtros
+        </h6>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <label for="filterType" class="form-label">Tipo de Evento</label>
+                <select class="form-select" id="filterType" onchange="applyFilters()">
+                    <option value="">Todos os eventos</option>
+                    <option value="request">Solicitações</option>
+                    <option value="stock">Movimentos de Estoque</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filterPeriod" class="form-label">Período</label>
+                <select class="form-select" id="filterPeriod" onchange="applyFilters()">
+                    <option value="">Todo o período</option>
+                    <option value="7">Últimos 7 dias</option>
+                    <option value="30">Últimos 30 dias</option>
+                    <option value="90">Últimos 90 dias</option>
+                    <option value="365">Último ano</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filterStatus" class="form-label">Status</label>
+                <select class="form-select" id="filterStatus" onchange="applyFilters()">
+                    <option value="">Todos os status</option>
+                    <option value="pendente">Pendente</option>
+                    <option value="enviado">Enviado</option>
+                    <option value="recebido">Recebido</option>
+                    <option value="cancelado">Cancelado</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="filterCompany" class="form-label">Empresa</label>
+                <select class="form-select" id="filterCompany" onchange="applyFilters()">
+                    <option value="">Todas as empresas</option>
+                    {% for request, item, user, company, location in requests_history %}
+                    <option value="{{ company.id }}">{{ company.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Timeline de Eventos -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul"></i> Linha do Tempo
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="timeline" id="timeline">
+            {% set all_events = [] %}
+
+            <!-- Adicionar solicitações à timeline -->
+            {% for request, item, user, company, location in requests_history %}
+            {% set _ = all_events.append({
+                'date': request.created_at,
+                'type': 'request',
+                'data': {
+                    'request': request,
+                    'item': item,
+                    'user': user,
+                    'company': company,
+                    'location': location
+                }
+            }) %}
+            {% endfor %}
+
+            <!-- Adicionar movimentos de estoque à timeline -->
+            {% for movement in stock_movements %}
+            {% set _ = all_events.append({
+                'date': movement.date,
+                'type': 'stock',
+                'data': movement
+            }) %}
+            {% endfor %}
+
+            <!-- Ordenar eventos por data (mais recente primeiro) -->
+            {% set sorted_events = all_events|sort(attribute='date', reverse=true) %}
+
+            {% for event in sorted_events %}
+            <div class="timeline-item"
+                 data-type="{{ event.type }}"
+                 data-date="{{ event.date.isoformat() }}"
+                 data-status="{{ event.data.request.status if event.type == 'request' else event.data.status if event.type == 'stock' else '' }}"
+                 data-company="{{ event.data.company.id if event.type == 'request' else '' }}">
+
+                {% if event.type == 'request' %}
+                <!-- Evento de Solicitação -->
+                <div class="timeline-marker bg-{{ 'warning' if event.data.request.status == 'pendente' else 'primary' if event.data.request.status == 'enviado' else 'success' if event.data.request.status == 'recebido' else 'secondary' }}">
+                    <i class="bi bi-{{ 'clock' if event.data.request.status == 'pendente' else 'truck' if event.data.request.status == 'enviado' else 'check-circle' if event.data.request.status == 'recebido' else 'x-circle' }}"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <h6 class="mb-1">
+                            Solicitação #{{ event.data.request.id }}
+                            <span class="badge bg-{{ 'warning' if event.data.request.status == 'pendente' else 'primary' if event.data.request.status == 'enviado' else 'success' if event.data.request.status == 'recebido' else 'secondary' }}">
+                                {{ event.data.request.status|title }}
+                            </span>
+                        </h6>
+                        <small class="text-muted">{{ event.date.strftime('%d/%m/%Y às %H:%M') }}</small>
+                    </div>
+                    <div class="timeline-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Solicitante:</strong> {{ event.data.user.username }}<br>
+                                <strong>Empresa:</strong> {{ event.data.company.name }}<br>
+                                <strong>Local:</strong> {{ event.data.location.name }}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Quantidade:</strong>
+                                <span class="badge bg-info">{{ event.data.item.quantity_requested }}</span><br>
+                                {% if event.data.item.quantity_sent > 0 %}
+                                <strong>Enviado:</strong>
+                                <span class="badge bg-primary">{{ event.data.item.quantity_sent }}</span><br>
+                                {% endif %}
+                                {% if event.data.item.quantity_received > 0 %}
+                                <strong>Recebido:</strong>
+                                <span class="badge bg-success">{{ event.data.item.quantity_received }}</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% if event.data.request.notes %}
+                        <div class="mt-2">
+                            <small class="text-muted">
+                                <strong>Observações:</strong> {{ event.data.request.notes }}
+                            </small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="timeline-footer">
+                        <a href="{{ url_for('view_request', id=event.data.request.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i> Ver Detalhes
+                        </a>
+                    </div>
+                </div>
+
+                {% elif event.type == 'stock' %}
+                <!-- Evento de Movimento de Estoque -->
+                <div class="timeline-marker bg-{{ 'success' if event.data.type == 'entrada' else 'danger' }}">
+                    <i class="bi bi-{{ 'plus-circle' if event.data.type == 'entrada' else 'dash-circle' }}"></i>
+                </div>
+                <div class="timeline-content">
+                    <div class="timeline-header">
+                        <h6 class="mb-1">
+                            {{ 'Entrada' if event.data.type == 'entrada' else 'Saída' }} de Estoque
+                            <span class="badge bg-{{ 'success' if event.data.type == 'entrada' else 'danger' }}">
+                                {{ '+' if event.data.type == 'entrada' else '-' }}{{ event.data.quantity }}
+                            </span>
+                        </h6>
+                        <small class="text-muted">{{ event.date.strftime('%d/%m/%Y às %H:%M') }}</small>
+                    </div>
+                    <div class="timeline-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <strong>Empresa:</strong> {{ event.data.company }}<br>
+                                <strong>Referência:</strong> <code>{{ event.data.reference }}</code>
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Status:</strong>
+                                <span class="badge bg-{{ 'success' if event.data.status == 'em_estoque' else 'warning' if event.data.status == 'enviado' else 'info' }}">
+                                    {{ event.data.status|title }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if not sorted_events %}
+            <div class="text-center py-5">
+                <i class="bi bi-clock-history" style="font-size: 3rem; color: #ccc;"></i>
+                <h5 class="mt-3 text-muted">Nenhum evento encontrado</h5>
+                <p class="text-muted">Esta peça ainda não possui histórico de movimentação.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+// Aplicar filtros na timeline
+function applyFilters() {
+    const filterType = document.getElementById('filterType').value;
+    const filterPeriod = document.getElementById('filterPeriod').value;
+    const filterStatus = document.getElementById('filterStatus').value;
+    const filterCompany = document.getElementById('filterCompany').value;
+
+    const timelineItems = document.querySelectorAll('.timeline-item');
+    const now = new Date();
+
+    timelineItems.forEach(item => {
+        let show = true;
+
+        // Filtro por tipo
+        if (filterType && item.getAttribute('data-type') !== filterType) {
+            show = false;
+        }
+
+        // Filtro por período
+        if (filterPeriod && show) {
+            const itemDate = new Date(item.getAttribute('data-date'));
+            const daysDiff = (now - itemDate) / (1000 * 60 * 60 * 24);
+            if (daysDiff > parseInt(filterPeriod)) {
+                show = false;
+            }
+        }
+
+        // Filtro por status
+        if (filterStatus && show && item.getAttribute('data-status') !== filterStatus) {
+            show = false;
+        }
+
+        // Filtro por empresa
+        if (filterCompany && show && item.getAttribute('data-company') !== filterCompany) {
+            show = false;
+        }
+
+        item.style.display = show ? 'block' : 'none';
+    });
+
+    // Verificar se há itens visíveis
+    const visibleItems = Array.from(timelineItems).filter(item => item.style.display !== 'none');
+    const emptyMessage = document.querySelector('.timeline .text-center');
+
+    if (visibleItems.length === 0 && !emptyMessage) {
+        const timeline = document.getElementById('timeline');
+        timeline.innerHTML = `
+            <div class="text-center py-5">
+                <i class="bi bi-search" style="font-size: 3rem; color: #ccc;"></i>
+                <h5 class="mt-3 text-muted">Nenhum evento encontrado</h5>
+                <p class="text-muted">Tente ajustar os filtros para encontrar eventos.</p>
+                <button class="btn btn-outline-primary" onclick="clearFilters()">
+                    <i class="bi bi-x-circle"></i> Limpar Filtros
+                </button>
+            </div>
+        `;
+    }
+}
+
+// Limpar todos os filtros
+function clearFilters() {
+    document.getElementById('filterType').value = '';
+    document.getElementById('filterPeriod').value = '';
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterCompany').value = '';
+
+    // Recarregar a página para mostrar todos os eventos
+    location.reload();
+}
+
+// Exportar para PDF
+function exportToPDF() {
+    // Implementar exportação para PDF
+    alert('Funcionalidade de exportação PDF em desenvolvimento');
+}
+
+// Exportar para CSV
+function exportToCSV() {
+    // Implementar exportação para CSV
+    const csvData = [];
+    const items = document.querySelectorAll('.timeline-item:not([style*="display: none"])');
+
+    csvData.push(['Data', 'Tipo', 'Descrição', 'Status', 'Empresa']);
+
+    items.forEach(item => {
+        const date = new Date(item.getAttribute('data-date')).toLocaleDateString('pt-BR');
+        const type = item.getAttribute('data-type') === 'request' ? 'Solicitação' : 'Estoque';
+        const description = item.querySelector('h6').textContent.trim();
+        const status = item.getAttribute('data-status') || '';
+        const company = item.querySelector('strong:contains("Empresa:")') ?
+            item.querySelector('strong:contains("Empresa:")').nextSibling.textContent.trim() : '';
+
+        csvData.push([date, type, description, status, company]);
+    });
+
+    // Converter para CSV e fazer download
+    const csvContent = csvData.map(row => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `historico_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
+
+// Lazy loading para timeline longa
+function setupLazyLoading() {
+    const items = document.querySelectorAll('.timeline-item');
+
+    if (items.length > 50) {
+        // Mostrar apenas os primeiros 20 itens
+        items.forEach((item, index) => {
+            if (index >= 20) {
+                item.style.display = 'none';
+                item.classList.add('lazy-hidden');
+            }
+        });
+
+        // Adicionar botão "Carregar mais"
+        const timeline = document.getElementById('timeline');
+        const loadMoreBtn = document.createElement('div');
+        loadMoreBtn.className = 'text-center mt-4';
+        loadMoreBtn.innerHTML = `
+            <button class="btn btn-outline-primary" onclick="loadMoreItems()">
+                <i class="bi bi-arrow-down"></i> Carregar Mais Eventos
+            </button>
+        `;
+        timeline.appendChild(loadMoreBtn);
+    }
+}
+
+function loadMoreItems() {
+    const hiddenItems = document.querySelectorAll('.timeline-item.lazy-hidden');
+    let count = 0;
+
+    hiddenItems.forEach(item => {
+        if (count < 20) {
+            item.style.display = 'block';
+            item.classList.remove('lazy-hidden');
+            count++;
+        }
+    });
+
+    // Remover botão se não há mais itens
+    if (document.querySelectorAll('.timeline-item.lazy-hidden').length === 0) {
+        document.querySelector('.text-center.mt-4').remove();
+    }
+}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    setupLazyLoading();
+
+    // Remover duplicatas do filtro de empresa
+    const companySelect = document.getElementById('filterCompany');
+    const uniqueCompanies = new Set();
+    const options = Array.from(companySelect.options);
+
+    options.forEach(option => {
+        if (option.value && uniqueCompanies.has(option.value)) {
+            option.remove();
+        } else if (option.value) {
+            uniqueCompanies.add(option.value);
+        }
+    });
+});
+</script>
+
+<style>
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 30px;
+    padding-left: 80px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.timeline-content {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.timeline-header {
+    border-bottom: 1px solid #e9ecef;
+    padding-bottom: 10px;
+    margin-bottom: 15px;
+}
+
+.timeline-footer {
+    border-top: 1px solid #e9ecef;
+    padding-top: 10px;
+    margin-top: 15px;
+}
+
+.avatar-lg {
+    width: 60px;
+    height: 60px;
+}
+
+@media (max-width: 768px) {
+    .timeline::before {
+        left: 15px;
+    }
+
+    .timeline-item {
+        padding-left: 50px;
+    }
+
+    .timeline-marker {
+        left: 5px;
+        width: 30px;
+        height: 30px;
+        font-size: 1rem;
+    }
+}
+</style>
+
+{% endblock %}

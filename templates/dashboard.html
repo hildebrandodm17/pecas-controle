@@ -1,0 +1,509 @@
+<!-- templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Sistema de Gestão de Estoque{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-speedometer2"></i> Dashboard
+        <small class="text-muted">Bem-vindo, {{ current_user.username }}!</small>
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary">
+                <i class="bi bi-calendar"></i>
+                {{ now.strftime('%d/%m/%Y') }}
+            </button>
+        </div>
+        <div class="btn-group">
+            <button type="button" class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Atualizar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Cards de estatísticas baseados no role -->
+<div class="row mb-4">
+    {% if current_user.role == 'master' %}
+    <!-- Cards para Master -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card stats-card h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Empresas
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ companies|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-building fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('manage_companies') }}" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-right"></i> Gerenciar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Usuários
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ total_users }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-people fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('manage_users') }}" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-right"></i> Gerenciar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Peças
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ total_parts }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-gear fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('manage_parts') }}" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-right"></i> Gerenciar
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card bg-secondary text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Sistema
+                        </div>
+                        <div class="h6 mb-0 font-weight-bold">
+                            Online
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-check-circle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <small>Última atualização: {{ now.strftime('%H:%M') }}</small>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if current_user.role in ['admin', 'receptor'] %}
+    <!-- Cards para Admin/Receptor -->
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card bg-warning text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Alertas de Estoque
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ stock_alerts|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-exclamation-triangle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('manage_stock') }}" class="btn btn-sm btn-dark">
+                    <i class="bi bi-arrow-right"></i> Ver Estoque
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Solicitações Pendentes
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ requests|selectattr('status', 'equalto', 'pendente')|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-clock fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('pending_requests') }}" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-right"></i> Processar
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if current_user.role == 'solicitante' %}
+    <!-- Cards para Solicitante -->
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card bg-info text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Minhas Solicitações
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ requests|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-list-ul fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('my_requests') }}" class="btn btn-sm btn-light">
+                    <i class="bi bi-arrow-right"></i> Ver Todas
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card bg-success text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Pendentes
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ requests|selectattr('status', 'equalto', 'pendente')|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-hourglass fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-4 col-md-6 mb-4">
+        <div class="card bg-primary text-white h-100">
+            <div class="card-body text-center">
+                <div class="mb-2">
+                    <i class="bi bi-plus-circle fa-3x opacity-75"></i>
+                </div>
+                <div class="h6 mb-0 font-weight-bold">
+                    Nova Solicitação
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{{ url_for('new_request') }}" class="btn btn-sm btn-light w-100">
+                    <i class="bi bi-plus"></i> Criar Agora
+                </a>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Solicitações recentes -->
+{% if requests %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-list-ul"></i>
+                    {% if current_user.role == 'solicitante' %}
+                        Minhas Solicitações Recentes
+                    {% else %}
+                        Solicitações Recentes da Empresa
+                    {% endif %}
+                </h5>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleView('table')">
+                        <i class="bi bi-table"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="toggleView('cards')">
+                        <i class="bi bi-grid"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Visualização em Tabela -->
+                <div id="table-view" class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Solicitante</th>
+                                <th>Local</th>
+                                <th>Itens</th>
+                                <th>Status</th>
+                                <th>Data</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for request in requests[:10] %}
+                            <tr>
+                                <td><strong>#{{ request.id }}</strong></td>
+                                <td>
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-person-circle me-2"></i>
+                                        {{ request.requester.username }}
+                                    </div>
+                                </td>
+                                <td>
+                                    <i class="bi bi-geo-alt text-primary"></i>
+                                    {{ request.location.name }}
+                                </td>
+                                <td>
+                                    <span class="badge bg-secondary">
+                                        {{ request.items|sum(attribute='quantity_requested') }} item(s)
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="badge
+                                        {% if request.status == 'pendente' %}bg-warning
+                                        {% elif request.status == 'enviado' %}bg-info
+                                        {% elif request.status == 'recebido' %}bg-success
+                                        {% else %}bg-secondary
+                                        {% endif %}">
+                                        {{ request.status|title }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>{{ request.created_at.strftime('%d/%m/%Y %H:%M') }}</small>
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('view_request', id=request.id) }}"
+                                       class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Visualização em Cards -->
+                <div id="cards-view" class="row" style="display: none;">
+                    {% for request in requests[:6] %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="card h-100 border-left-{{ 'warning' if request.status == 'pendente' else 'info' if request.status == 'enviado' else 'success' }}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <h6 class="card-title">#{{ request.id }}</h6>
+                                    <span class="badge bg-{{ 'warning' if request.status == 'pendente' else 'info' if request.status == 'enviado' else 'success' }}">
+                                        {{ request.status|title }}
+                                    </span>
+                                </div>
+                                <p class="card-text">
+                                    <small class="text-muted">
+                                        <i class="bi bi-person"></i> {{ request.requester.username }}<br>
+                                        <i class="bi bi-geo-alt"></i> {{ request.location.name }}<br>
+                                        <i class="bi bi-calendar"></i> {{ request.created_at.strftime('%d/%m/%Y') }}
+                                    </small>
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">
+                                        {{ request.items|sum(attribute='quantity_requested') }} item(s)
+                                    </small>
+                                    <a href="{{ url_for('view_request', id=request.id) }}"
+                                       class="btn btn-sm btn-primary">Ver</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if requests|length > 10 %}
+                <div class="text-center mt-3">
+                    <a href="{{ url_for('my_requests') }}" class="btn btn-outline-primary">
+                        Ver todas as {{ requests|length }} solicitações
+                        <i class="bi bi-arrow-right"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Alertas de estoque baixo -->
+{% if stock_alerts %}
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card border-warning">
+            <div class="card-header bg-warning text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Alertas de Estoque Baixo
+                    <span class="badge bg-light text-dark">{{ stock_alerts|length }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for stock, part in stock_alerts[:6] %}
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <div class="alert alert-warning d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ part.name }}</strong><br>
+                                <small>Estoque: <span class="text-danger">{{ stock.quantity }}</span> | Mínimo: {{ stock.min_quantity }}</small>
+                            </div>
+                            <a href="{{ url_for('manage_stock') }}" class="btn btn-sm btn-warning">
+                                <i class="bi bi-plus"></i>
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% if stock_alerts|length > 6 %}
+                <div class="text-center">
+                    <a href="{{ url_for('manage_stock') }}" class="btn btn-warning">
+                        Ver todos os {{ stock_alerts|length }} alertas
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Quick Actions -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="card bg-light">
+            <div class="card-body">
+                <h6 class="card-title">
+                    <i class="bi bi-lightning"></i> Ações Rápidas
+                </h6>
+                <div class="btn-group flex-wrap">
+                    {% if current_user.role in ['solicitante', 'admin', 'master'] %}
+                    <a href="{{ url_for('new_request') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-plus-circle"></i> Nova Solicitação
+                    </a>
+                    {% endif %}
+
+                    {% if current_user.role in ['receptor', 'admin', 'master'] %}
+                    <a href="{{ url_for('manage_stock') }}" class="btn btn-outline-info">
+                        <i class="bi bi-boxes"></i> Gerenciar Estoque
+                    </a>
+                    <a href="{{ url_for('generate_qr_codes') }}" class="btn btn-outline-secondary">
+                        <i class="bi bi-qr-code"></i> QR Codes
+                    </a>
+                    {% endif %}
+
+                    {% if current_user.role in ['admin', 'master', 'receptor'] %}
+                    <a href="{{ url_for('reports') }}" class="btn btn-outline-success">
+                        <i class="bi bi-graph-up"></i> Relatórios
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Toggle between table and cards view
+function toggleView(viewType) {
+    const tableView = document.getElementById('table-view');
+    const cardsView = document.getElementById('cards-view');
+
+    if (viewType === 'table') {
+        tableView.style.display = 'block';
+        cardsView.style.display = 'none';
+    } else {
+        tableView.style.display = 'none';
+        cardsView.style.display = 'flex';
+    }
+}
+
+// Auto-refresh dashboard every 5 minutes
+setInterval(() => {
+    const now = new Date();
+    const minutes = now.getMinutes();
+
+    // Only refresh on exact 5-minute intervals
+    if (minutes % 5 === 0 && now.getSeconds() === 0) {
+        location.reload();
+    }
+}, 1000);
+
+// Welcome animation
+document.addEventListener('DOMContentLoaded', function() {
+    const cards = document.querySelectorAll('.stats-card, .card');
+    cards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+});
+</script>
+
+<style>
+.border-left-warning {
+    border-left: 4px solid #ffc107 !important;
+}
+.border-left-info {
+    border-left: 4px solid #0dcaf0 !important;
+}
+.border-left-success {
+    border-left: 4px solid #198754 !important;
+}
+</style>
+
+{% endblock %}

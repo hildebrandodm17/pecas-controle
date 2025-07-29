@@ -1,0 +1,602 @@
+<!-- templates/users.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestão de Usuários{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-people"></i> Gestão de Usuários
+        {% if users %}
+        <span class="badge bg-primary">{{ users|length }}</span>
+        {% endif %}
+        {% if current_user.role != 'master' %}
+        <small class="text-muted">{{ current_user.company.name }}</small>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('new_user') }}" class="btn btn-primary">
+            <i class="bi bi-person-plus"></i> Novo Usuário
+        </a>
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-funnel"></i> Filtros
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="?filter=all">Todos os Usuários</a></li>
+                <li><a class="dropdown-item" href="?filter=active">Apenas Ativos</a></li>
+                <li><a class="dropdown-item" href="?filter=inactive">Apenas Inativos</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="?role=admin">Administradores</a></li>
+                <li><a class="dropdown-item" href="?role=receptor">Receptores</a></li>
+                <li><a class="dropdown-item" href="?role=solicitante">Solicitantes</a></li>
+                {% if current_user.role == 'master' %}
+                <li><a class="dropdown-item" href="?role=master">Masters</a></li>
+                {% endif %}
+            </ul>
+        </div>
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleView('table')">
+                <i class="bi bi-table"></i>
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleView('cards')">
+                <i class="bi bi-grid"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if users %}
+<!-- Resumo de Usuários -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Usuários
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ users|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-people fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Usuários Ativos
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ users|selectattr('is_active')|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-check-circle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Administradores
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ users|selectattr('role', 'in', ['master', 'admin'])|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-shield-check fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Criados Este Mês
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {% set this_month = now.month %}
+                            {% set this_year = now.year %}
+                            {{ users|selectattr('created_at')|selectattr('created_at.month', 'equalto', this_month)|selectattr('created_at.year', 'equalto', this_year)|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-calendar-plus fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Campo de Busca -->
+<div class="row mb-3">
+    <div class="col-md-8">
+        <div class="input-group">
+            <span class="input-group-text">
+                <i class="bi bi-search"></i>
+            </span>
+            <input type="text" class="form-control" id="searchInput"
+                   placeholder="Buscar por nome, email ou empresa..."
+                   onkeyup="filterUsers()">
+        </div>
+    </div>
+    <div class="col-md-4">
+        <select class="form-select" id="roleFilter" onchange="filterByRole()">
+            <option value="">Todos os perfis</option>
+            {% if current_user.role == 'master' %}
+            <option value="master">Master</option>
+            {% endif %}
+            <option value="admin">Administrador</option>
+            <option value="receptor">Receptor</option>
+            <option value="solicitante">Solicitante</option>
+        </select>
+    </div>
+</div>
+
+<!-- Visualização em Tabela -->
+<div id="table-view" class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul"></i> Lista de Usuários
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Usuário</th>
+                        <th>Email</th>
+                        <th>Perfil</th>
+                        {% if current_user.role == 'master' %}
+                        <th>Empresa</th>
+                        {% endif %}
+                        <th>Último Acesso</th>
+                        <th>Criado em</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                    {% for user in users %}
+                    <tr data-user="{{ user.username|lower }} {{ user.email|lower }} {{ user.company.name|lower if user.company else '' }}"
+                        data-role="{{ user.role }}"
+                        class="{{ 'table-light' if not user.is_active else '' }}">
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm bg-{{ 'danger' if user.role == 'master' else 'primary' if user.role == 'admin' else 'info' if user.role == 'receptor' else 'success' }} text-white rounded-circle d-flex align-items-center justify-content-center me-3">
+                                    {{ user.username[0]|upper }}
+                                </div>
+                                <div>
+                                    <strong>{{ user.username }}</strong>
+                                    {% if user.id == current_user.id %}
+                                    <span class="badge bg-secondary ms-1">Você</span>
+                                    {% endif %}
+                                    {% if not user.is_active %}
+                                    <br><small class="text-muted">Conta inativa</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <a href="mailto:{{ user.email }}" class="text-decoration-none">
+                                {{ user.email }}
+                            </a>
+                            {% if user.email == current_user.email %}
+                            <i class="bi bi-person-check text-primary" title="Seu email"></i>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge
+                                {% if user.role == 'master' %}bg-danger
+                                {% elif user.role == 'admin' %}bg-primary
+                                {% elif user.role == 'receptor' %}bg-info
+                                {% else %}bg-success
+                                {% endif %}">
+                                <i class="bi bi-{{ 'crown' if user.role == 'master' else 'shield' if user.role == 'admin' else 'inbox' if user.role == 'receptor' else 'person' }}"></i>
+                                {{ user.role|title }}
+                            </span>
+                        </td>
+                        {% if current_user.role == 'master' %}
+                        <td>
+                            {% if user.company %}
+                            <span class="text-primary">{{ user.company.name }}</span>
+                            {% else %}
+                            <span class="text-muted">Sistema</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
+                        <td>
+                            <small class="text-muted">
+                                {% if user.id == current_user.id %}
+                                <span class="text-success">Online agora</span>
+                                {% else %}
+                                Não disponível
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            <strong>{{ user.created_at.strftime('%d/%m/%Y') }}</strong>
+                            <br><small class="text-muted">{{ user.created_at.strftime('%H:%M') }}</small>
+                        </td>
+                        <td>
+                            <span class="badge {{ 'bg-success' if user.is_active else 'bg-secondary' }}">
+                                <i class="bi bi-{{ 'check-circle' if user.is_active else 'pause-circle' }}"></i>
+                                {{ 'Ativo' if user.is_active else 'Inativo' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <a href="{{ url_for('edit_user', id=user.id) }}"
+                                   class="btn btn-sm btn-outline-primary"
+                                   title="Editar usuário">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% if user.id != current_user.id %}
+                                <button class="btn btn-sm btn-outline-{{ 'success' if not user.is_active else 'warning' }}"
+                                        onclick="toggleUserStatus({{ user.id }}, {{ user.is_active|lower }})"
+                                        title="{{ 'Ativar' if not user.is_active else 'Desativar' }} usuário">
+                                    <i class="bi bi-{{ 'play' if not user.is_active else 'pause' }}"></i>
+                                </button>
+                                {% endif %}
+                                {% if user.role in ['solicitante', 'receptor'] %}
+                                <a href="{{ url_for('my_requests') }}?user_id={{ user.id }}"
+                                   class="btn btn-sm btn-outline-info"
+                                   title="Ver solicitações">
+                                    <i class="bi bi-list-ul"></i>
+                                </a>
+                                {% endif %}
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="#" onclick="resetPassword({{ user.id }})">
+                                            <i class="bi bi-key"></i> Redefinir Senha
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="#" onclick="sendWelcomeEmail({{ user.id }})">
+                                            <i class="bi bi-envelope"></i> Enviar Boas-vindas
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        {% if user.id != current_user.id %}
+                                        <li><a class="dropdown-item text-danger" href="#" onclick="deleteUser({{ user.id }})">
+                                            <i class="bi bi-trash"></i> Excluir Usuário
+                                        </a></li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Visualização em Cards -->
+<div id="cards-view" class="row" style="display: none;">
+    {% for user in users %}
+    <div class="col-md-6 col-lg-4 mb-4" data-user="{{ user.username|lower }} {{ user.email|lower }} {{ user.company.name|lower if user.company else '' }}"
+         data-role="{{ user.role }}">
+        <div class="card h-100 {{ 'border-success' if user.is_active else 'border-secondary' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <div class="avatar-sm bg-{{ 'danger' if user.role == 'master' else 'primary' if user.role == 'admin' else 'info' if user.role == 'receptor' else 'success' }} text-white rounded-circle d-flex align-items-center justify-content-center me-2">
+                        {{ user.username[0]|upper }}
+                    </div>
+                    <div>
+                        <h6 class="card-title mb-0">{{ user.username }}</h6>
+                        {% if user.id == current_user.id %}
+                        <small class="badge bg-secondary">Você</small>
+                        {% endif %}
+                    </div>
+                </div>
+                <span class="badge {{ 'bg-success' if user.is_active else 'bg-secondary' }}">
+                    {{ 'Ativo' if user.is_active else 'Inativo' }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <i class="bi bi-envelope"></i>
+                        <a href="mailto:{{ user.email }}" class="text-decoration-none">
+                            {{ user.email }}
+                        </a>
+                    </small>
+                </div>
+
+                <div class="mb-2">
+                    <span class="badge
+                        {% if user.role == 'master' %}bg-danger
+                        {% elif user.role == 'admin' %}bg-primary
+                        {% elif user.role == 'receptor' %}bg-info
+                        {% else %}bg-success
+                        {% endif %}">
+                        <i class="bi bi-{{ 'crown' if user.role == 'master' else 'shield' if user.role == 'admin' else 'inbox' if user.role == 'receptor' else 'person' }}"></i>
+                        {{ user.role|title }}
+                    </span>
+                </div>
+
+                {% if user.company %}
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <i class="bi bi-building"></i> {{ user.company.name }}
+                    </small>
+                </div>
+                {% endif %}
+
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <i class="bi bi-calendar"></i> Criado em {{ user.created_at.strftime('%d/%m/%Y') }}
+                    </small>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="btn-group w-100">
+                    <a href="{{ url_for('edit_user', id=user.id) }}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    {% if user.id != current_user.id %}
+                    <button class="btn btn-outline-{{ 'success' if not user.is_active else 'warning' }} btn-sm"
+                            onclick="toggleUserStatus({{ user.id }}, {{ user.is_active|lower }})">
+                        <i class="bi bi-{{ 'play' if not user.is_active else 'pause' }}"></i>
+                    </button>
+                    {% endif %}
+                    {% if user.role in ['solicitante', 'receptor'] %}
+                    <a href="{{ url_for('my_requests') }}?user_id={{ user.id }}"
+                       class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-list-ul"></i>
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<!-- Estado Vazio -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-people" style="font-size: 4rem; color: #ccc;"></i>
+        <h4 class="mt-3">Nenhum usuário cadastrado</h4>
+        <p class="text-muted">
+            {% if current_user.role == 'master' %}
+            Comece cadastrando usuários administradores para as empresas.
+            {% else %}
+            Comece cadastrando usuários para sua empresa.
+            {% endif %}
+        </p>
+
+        <div class="row justify-content-center mt-4">
+            <div class="col-md-6">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6>Perfis disponíveis:</h6>
+                        <ul class="text-start">
+                            {% if current_user.role == 'master' %}
+                            <li><strong>Master:</strong> Acesso total ao sistema</li>
+                            {% endif %}
+                            <li><strong>Administrador:</strong> Gerencia a empresa</li>
+                            <li><strong>Receptor:</strong> Controla estoque</li>
+                            <li><strong>Solicitante:</strong> Faz pedidos</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <a href="{{ url_for('new_user') }}" class="btn btn-primary btn-lg mt-3">
+            <i class="bi bi-person-plus"></i> Cadastrar Primeiro Usuário
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Busca em tempo real
+function filterUsers() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const tableRows = document.querySelectorAll('#usersTableBody tr[data-user]');
+    const cardItems = document.querySelectorAll('#cards-view .col-md-6[data-user]');
+
+    // Filtrar tabela
+    tableRows.forEach(row => {
+        const userData = row.getAttribute('data-user');
+        row.style.display = userData.includes(searchTerm) ? '' : 'none';
+    });
+
+    // Filtrar cards
+    cardItems.forEach(card => {
+        const userData = card.getAttribute('data-user');
+        card.style.display = userData.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+// Filtrar por role
+function filterByRole() {
+    const selectedRole = document.getElementById('roleFilter').value;
+    const tableRows = document.querySelectorAll('#usersTableBody tr[data-role]');
+    const cardItems = document.querySelectorAll('#cards-view .col-md-6[data-role]');
+
+    // Filtrar tabela
+    tableRows.forEach(row => {
+        const userRole = row.getAttribute('data-role');
+        row.style.display = (!selectedRole || userRole === selectedRole) ? '' : 'none';
+    });
+
+    // Filtrar cards
+    cardItems.forEach(card => {
+        const userRole = card.getAttribute('data-role');
+        card.style.display = (!selectedRole || userRole === selectedRole) ? '' : 'none';
+    });
+}
+
+// Toggle entre visualizações
+function toggleView(viewType) {
+    const tableView = document.getElementById('table-view');
+    const cardsView = document.getElementById('cards-view');
+
+    if (viewType === 'table') {
+        tableView.style.display = 'block';
+        cardsView.style.display = 'none';
+    } else {
+        tableView.style.display = 'none';
+        cardsView.style.display = 'flex';
+    }
+}
+
+// Toggle status do usuário
+function toggleUserStatus(userId, isActive) {
+    const action = isActive ? 'desativar' : 'ativar';
+
+    if (confirm(`Tem certeza que deseja ${action} este usuário?`)) {
+        fetch(`/api/users/${userId}/toggle-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao alterar status: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erro na comunicação: ' + error);
+        });
+    }
+}
+
+// Redefinir senha
+function resetPassword(userId) {
+    if (confirm('Tem certeza que deseja redefinir a senha deste usuário?')) {
+        fetch(`/api/users/${userId}/reset-password`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(`Nova senha: ${data.new_password}\n\nAnote esta senha e repasse ao usuário.`);
+            } else {
+                alert('Erro ao redefinir senha: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erro na comunicação: ' + error);
+        });
+    }
+}
+
+// Enviar email de boas-vindas
+function sendWelcomeEmail(userId) {
+    fetch(`/api/users/${userId}/welcome-email`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('Email de boas-vindas enviado com sucesso!');
+        } else {
+            alert('Erro ao enviar email: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Erro na comunicação: ' + error);
+    });
+}
+
+// Excluir usuário
+function deleteUser(userId) {
+    if (confirm('ATENÇÃO: Esta ação não pode ser desfeita!\n\nTem certeza que deseja excluir este usuário?')) {
+        if (confirm('Confirme novamente: Excluir usuário permanentemente?')) {
+            fetch(`/api/users/${userId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert('Erro ao excluir usuário: ' + data.message);
+                }
+            })
+            .catch(error => {
+                alert('Erro na comunicação: ' + error);
+            });
+        }
+    }
+}
+</script>
+
+<style>
+.avatar-sm {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.table-light {
+    background-color: #f8f9fa;
+    opacity: 0.7;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .btn-group {
+        flex-direction: column;
+    }
+
+    .btn-group .btn {
+        margin-bottom: 2px;
+    }
+}
+</style>
+
+{% endblock %}

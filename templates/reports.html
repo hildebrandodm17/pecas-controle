@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Relatórios e Análises</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        {% if report_data %}
+        <div class="btn-group me-2">
+            <a href="{{ url_for('export_report', company_id=current_company_id, start_date=start_date, end_date=end_date, report_type=report_type, format='csv') }}"
+               class="btn btn-outline-success btn-sm">
+                <i class="bi bi-filetype-csv"></i> Exportar CSV
+            </a>
+            <a href="{{ url_for('export_report', company_id=current_company_id, start_date=start_date, end_date=end_date, report_type=report_type, format='pdf') }}"
+               class="btn btn-outline-danger btn-sm">
+                <i class="bi bi-filetype-pdf"></i> Exportar PDF
+            </a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Filtros -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-funnel"></i> Filtros do Relatório
+        </h5>
+    </div>
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            {% if current_user.role == 'master' %}
+            <div class="col-md-3">
+                <label for="company_id" class="form-label">Empresa</label>
+                <select name="company_id" id="company_id" class="form-select" required>
+                    <option value="">Selecione a empresa</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {{ 'selected' if current_company_id == company.id else '' }}>
+                        {{ company.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div class="col-md-2">
+                <label for="start_date" class="form-label">Data Início</label>
+                <input type="date" name="start_date" id="start_date" class="form-control"
+                       value="{{ start_date }}" required>
+            </div>
+
+            <div class="col-md-2">
+                <label for="end_date" class="form-label">Data Fim</label>
+                <input type="date" name="end_date" id="end_date" class="form-control"
+                       value="{{ end_date }}" required>
+            </div>
+
+            <div class="col-md-3">
+                <label for="report_type" class="form-label">Tipo de Relatório</label>
+                <select name="report_type" id="report_type" class="form-select">
+                    <option value="summary" {{ 'selected' if report_type == 'summary' else '' }}>Resumo Geral</option>
+                    <option value="requests_by_requester" {{ 'selected' if report_type == 'requests_by_requester' else '' }}>Por Solicitante</option>
+                    <option value="requests_by_location" {{ 'selected' if report_type == 'requests_by_location' else '' }}>Por Local</option>
+                    <option value="parts_movement" {{ 'selected' if report_type == 'parts_movement' else '' }}>Movimentação de Peças</option>
+                    <option value="stock_status" {{ 'selected' if report_type == 'stock_status' else '' }}>Status do Estoque</option>
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">&nbsp;</label>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search"></i> Gerar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Resultados do Relatório -->
+{% if report_data %}
+<div class="row">
+    {% if report_type == 'summary' %}
+    <!-- Resumo Geral -->
+    <div class="col-md-3 mb-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Solicitações
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ report_data.total_requests }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-list-ul fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status das Solicitações -->
+    <div class="col-md-9 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Solicitações por Status</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for status, count in report_data.status_data %}
+                    <div class="col-md-4 mb-2">
+                        <span class="badge
+                            {% if status == 'pendente' %}bg-warning
+                            {% elif status == 'enviado' %}bg-info
+                            {% elif status == 'recebido' %}bg-success
+                            {% else %}bg-secondary
+                            {% endif %} me-2">
+                            {{ status|title }}
+                        </span>
+                        <strong>{{ count }}</strong>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Peças Mais Solicitadas -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Peças Mais Solicitadas</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Peça</th>
+                                <th>Quantidade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for part_name, total in report_data.most_requested %}
+                            <tr>
+                                <td>{{ part_name }}</td>
+                                <td><span class="badge bg-primary">{{ total }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Solicitantes Mais Ativos -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Solicitantes Mais Ativos</h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Usuário</th>
+                                <th>Solicitações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for username, total in report_data.top_requesters %}
+                            <tr>
+                                <td>{{ username }}</td>
+                                <td><span class="badge bg-info">{{ total }}</span></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% else %}
+    <!-- Outros tipos de relatório -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    {% if report_type == 'requests_by_requester' %}Relatório por Solicitante
+                    {% elif report_type == 'requests_by_location' %}Relatório por Local
+                    {% elif report_type == 'parts_movement' %}Movimentação de Peças
+                    {% elif report_type == 'stock_status' %}Status do Estoque
+                    {% endif %}
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                {% if report_type == 'requests_by_requester' %}
+                                <th>Usuário</th>
+                                <th>Email</th>
+                                <th>Total Solicitações</th>
+                                <th>Processadas</th>
+                                <th>Total Itens</th>
+                                {% elif report_type == 'requests_by_location' %}
+                                <th>Local</th>
+                                <th>Total Solicitações</th>
+                                <th>Total Itens</th>
+                                <th>Média Itens</th>
+                                {% elif report_type == 'parts_movement' %}
+                                <th>Peça</th>
+                                <th>Código</th>
+                                <th>Solicitado</th>
+                                <th>Enviado</th>
+                                <th>Recebido</th>
+                                {% elif report_type == 'stock_status' %}
+                                <th>Peça</th>
+                                <th>Categoria</th>
+                                <th>Estoque</th>
+                                <th>Mínimo</th>
+                                <th>Instâncias</th>
+                                <th>Disponível</th>
+                                <th>Enviado</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in report_data %}
+                            <tr>
+                                {% for value in row %}
+                                <td>{{ value or '-' }}</td>
+                                {% endfor %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endif %}
+
+<script>
+// Auto-ajustar data fim para hoje se não definida
+document.addEventListener('DOMContentLoaded', function() {
+    const startDate = document.getElementById('start_date');
+    const endDate = document.getElementById('end_date');
+
+    if (!endDate.value) {
+        endDate.value = new Date().toISOString().split('T')[0];
+    }
+
+    if (!startDate.value) {
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        startDate.value = lastMonth.toISOString().split('T')[0];
+    }
+});
+</script>
+{% endblock %}

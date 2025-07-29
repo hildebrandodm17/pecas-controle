@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+
+{% block title %}Geração de QR Codes{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Geração de QR Codes</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        {% if instances %}
+        <a href="{{ url_for('download_qr_codes', company_id=current_company_id) }}"
+           class="btn btn-primary">
+            <i class="bi bi-download"></i> Baixar PDF
+        </a>
+        {% endif %}
+        <button type="button" class="btn btn-outline-secondary ms-2" onclick="startQRScanner()">
+            <i class="bi bi-camera"></i> Ler QR Code
+        </button>
+    </div>
+</div>
+
+{% if current_user.role == 'master' %}
+<div class="mb-3">
+    <form method="GET" class="row g-3">
+        <div class="col-auto">
+            <label for="company_id" class="form-label">Filtrar por Empresa:</label>
+        </div>
+        <div class="col-auto">
+            <select name="company_id" id="company_id" class="form-select" onchange="this.form.submit()">
+                {% for company in companies %}
+                <option value="{{ company.id }}" {{ 'selected' if company.id == current_company_id else '' }}>
+                    {{ company.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+<!-- Scanner de QR Code -->
+<div id="qr-scanner" class="card mb-4" style="display: none;">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-camera"></i> Scanner de QR Code
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div id="qr-reader" style="width: 100%;"></div>
+                <button type="button" class="btn btn-secondary mt-2" onclick="stopQRScanner()">
+                    Parar Scanner
+                </button>
+            </div>
+            <div class="col-md-6">
+                <div id="qr-result" class="alert alert-info" style="display: none;">
+                    <h6>Resultado do Scan:</h6>
+                    <div id="qr-result-content"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Grid de QR Codes -->
+{% if instances %}
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-qr-code"></i> QR Codes Disponíveis ({{ instances|length }} itens)
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            {% for instance in instances %}
+            <div class="col-md-3 col-sm-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body text-center">
+                        <!-- QR Code -->
+                        <div class="mb-2">
+                            <img src="data:image/png;base64,{{ instance.qr_code }}"
+                                 alt="QR Code" class="qr-code img-fluid">
+                        </div>
+
+                        <!-- Informações da Peça -->
+                        <h6 class="card-title">{{ instance.part.name }}</h6>
+                        <p class="card-text">
+                            <strong>Código:</strong> {{ instance.unique_code }}<br>
+                            <small class="text-muted">{{ instance.created_at.strftime('%d/%m/%Y') }}</small>
+                        </p>
+
+                        <!-- Status -->
+                        <span class="badge
+                            {% if instance.status == 'em_estoque' %}bg-success
+                            {% elif instance.status == 'enviado' %}bg-info
+                            {% elif instance.status == 'recebido' %}bg-warning
+                            {% endif %}">
+                            {{ instance.status|replace('_', ' ')|title }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body text-center">
+        <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+        <h4 class="mt-3">Nenhuma instância encontrada</h4>
+        <p class="text-muted">Adicione peças ao estoque para gerar QR codes.</p>
+        <a href="{{ url_for('manage_stock') }}" class="btn btn-primary">
+            <i class="bi bi-boxes"></i> Gerenciar Estoque
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<script>
+let html5QrcodeScanner = null;
+
+function startQRScanner() {
+    document.getElementById('qr-scanner').style.display = 'block';
+
+    html5QrcodeScanner = new Html5QrcodeScanner(
+        "qr-reader",
+        { fps: 10, qrbox: {width: 250, height: 250} },
+        false
+    );
+
+    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+}
+
+function stopQRScanner() {
+    if (html5QrcodeScanner) {
+        html5QrcodeScanner.clear();
+        html5QrcodeScanner = null;
+    }
+    document.getElementById('qr-scanner').style.display = 'none';
+    document.getElementById('qr-result').style.display = 'none';
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    // Processar resultado do scan
+    fetch('/api/qr/scan', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ qr_content: decodedText })
+    })
+    .then(response => response.json())
+    .then(data => {
+        const resultDiv = document.getElementById('qr-result');
+        const contentDiv = document.getElementById('qr-result-content');
+
+        if (data.success) {
+            resultDiv.className = 'alert alert-success';
+            contentDiv.innerHTML = `
+                <strong>Peça:</strong> ${data.data.part_name}<br>
+                <strong>Código:</strong> ${data.data.unique_code}<br>
+                <strong>Status:</strong> ${data.data.status}<br>
+                <strong>Empresa:</strong> ${data.data.company}<br>
+                <strong>Criado em:</strong> ${data.data.created_at}
+            `;
+        } else {
+            resultDiv.className = 'alert alert-danger';
+            contentDiv.innerHTML = `<strong>Erro:</strong> ${data.message}`;
+        }
+
+        resultDiv.style.display = 'block';
+    })
+    .catch(error => {
+        console.error('Erro:', error);
+        const resultDiv = document.getElementById('qr-result');
+        const contentDiv = document.getElementById('qr-result-content');
+
+        resultDiv.className = 'alert alert-danger';
+        contentDiv.innerHTML = '<strong>Erro:</strong> Falha na comunicação com o servidor';
+        resultDiv.style.display = 'block';
+    });
+}
+
+function onScanFailure(error) {
+    // Handle scan failure, usually better to ignore and keep scanning.
+    // For example:
+    console.warn(`Code scan error = ${error}`);
+}
+</script>
+{% endblock %}
+
+
+

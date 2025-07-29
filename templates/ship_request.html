@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Enviar Peças{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Enviar Peças - Solicitação #{{ request.id }}</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('pending_requests') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+
+<!-- Informações da Solicitação -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Informações da Solicitação</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <p><strong>Solicitante:</strong> {{ request.requester.username }}</p>
+                <p><strong>Local de Destino:</strong> {{ request.location.name }}</p>
+                {% if request.equipment %}
+                <p><strong>Equipamento:</strong> {{ request.equipment.name }}</p>
+                {% endif %}
+            </div>
+            <div class="col-md-6">
+                <p><strong>Data da Solicitação:</strong> {{ request.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
+                <p><strong>Status:</strong>
+                    <span class="badge bg-warning">{{ request.status|title }}</span>
+                </p>
+                {% if request.notes %}
+                <p><strong>Observações:</strong> {{ request.notes }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Formulário de Envio -->
+<form method="POST" id="shipment-form">
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Dados do Envio</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="shipping_method" class="form-label">Método de Envio *</label>
+                        <input type="text" class="form-control" id="shipping_method" name="shipping_method"
+                               placeholder="Ex: Transportadora ABC, Correios, Entrega própria" required>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="tracking_number" class="form-label">Número de Rastreamento</label>
+                        <input type="text" class="form-control" id="tracking_number" name="tracking_number"
+                               placeholder="Código de rastreamento (opcional)">
+                    </div>
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="notes" class="form-label">Observações do Envio</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3"
+                          placeholder="Informações adicionais sobre o envio"></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- Itens para Envio -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Selecionar Itens para Envio</h5>
+        </div>
+        <div class="card-body">
+            {% for item in request.items %}
+            <div class="border rounded p-3 mb-3">
+                <div class="row align-items-center">
+                    <div class="col-md-4">
+                        <h6>{{ item.part.name }}</h6>
+                        <small class="text-muted">{{ item.part.part_number or 'S/N' }}</small>
+                    </div>
+                    <div class="col-md-2">
+                        <small class="text-muted">Solicitado:</small><br>
+                        <strong>{{ item.quantity_requested }}</strong>
+                    </div>
+                    <div class="col-md-2">
+                        <small class="text-muted">Já Enviado:</small><br>
+                        <strong>{{ item.quantity_sent }}</strong>
+                    </div>
+                    <div class="col-md-4">
+                        {% set available = available_instances.get(item.id, []) %}
+                        {% if available %}
+                        <label class="form-label">Selecionar Instâncias:</label>
+                        <div class="form-check-container" style="max-height: 150px; overflow-y: auto;">
+                            {% for instance in available %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox"
+                                       name="instances_{{ item.id }}" value="{{ instance.id }}"
+                                       id="instance_{{ instance.id }}">
+                                <label class="form-check-label" for="instance_{{ instance.id }}">
+                                    {{ instance.unique_code }}
+                                    <small class="text-muted d-block">{{ instance.created_at.strftime('%d/%m/%Y') }}</small>
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <small class="text-info">
+                            <i class="bi bi-info-circle"></i>
+                            {{ available|length }} instâncias disponíveis
+                        </small>
+                        {% else %}
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            Nenhuma instância disponível em estoque
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
+            Cancelar
+        </button>
+        <button type="submit" class="btn btn-primary" onclick="return confirmShipment()">
+            <i class="bi bi-send"></i> Confirmar Envio
+        </button>
+    </div>
+</form>
+
+<script>
+function confirmShipment() {
+    const selectedInstances = document.querySelectorAll('input[type="checkbox"]:checked');
+
+    if (selectedInstances.length === 0) {
+        alert('Selecione pelo menos uma instância para enviar.');
+        return false;
+    }
+
+    const count = selectedInstances.length;
+    return confirm(`Confirmar o envio de ${count} item(ns)?`);
+}
+
+// Adicionar botões de seleção rápida
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.form-check-container').forEach(container => {
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+
+        if (checkboxes.length > 1) {
+            const selectAllBtn = document.createElement('button');
+            selectAllBtn.type = 'button';
+            selectAllBtn.className = 'btn btn-sm btn-outline-primary me-2 mb-2';
+            selectAllBtn.innerHTML = '<i class="bi bi-check-all"></i> Todos';
+            selectAllBtn.onclick = function() {
+                checkboxes.forEach(cb => cb.checked = true);
+            };
+
+            const selectNoneBtn = document.createElement('button');
+            selectNoneBtn.type = 'button';
+            selectNoneBtn.className = 'btn btn-sm btn-outline-secondary mb-2';
+            selectNoneBtn.innerHTML = '<i class="bi bi-x"></i> Nenhum';
+            selectNoneBtn.onclick = function() {
+                checkboxes.forEach(cb => cb.checked = false);
+            };
+
+            container.parentNode.insertBefore(selectAllBtn, container);
+            container.parentNode.insertBefore(selectNoneBtn, container);
+        }
+    });
+});
+</script>
+{% endblock %}

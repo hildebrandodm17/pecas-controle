@@ -1,0 +1,562 @@
+<!-- templates/part_form.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if edit else 'Nova' }} Peça{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-{{ 'pencil' if edit else 'plus' }}"></i>
+        {{ 'Editar' if edit else 'Nova' }} Peça
+        {% if edit and part %}
+        <small class="text-muted">{{ part.name }}</small>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manage_parts') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        {% if edit %}
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-three-dots"></i> Ações
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('view_part', id=part.id) }}">
+                    <i class="bi bi-eye"></i> Ver Detalhes
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('manage_stock') }}?part_id={{ part.id }}">
+                    <i class="bi bi-boxes"></i> Ver Estoque
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('generate_qr_codes') }}?part_id={{ part.id }}">
+                    <i class="bi bi-qr-code"></i> QR Codes
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" onclick="duplicatePart()">
+                    <i class="bi bi-files"></i> Duplicar Peça
+                </a></li>
+                <li><a class="dropdown-item text-warning" href="#" onclick="togglePartStatus()">
+                    <i class="bi bi-{{ 'pause' if part.is_active else 'play' }}"></i>
+                    {{ 'Desativar' if part.is_active else 'Ativar' }}
+                </a></li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i> Informações da Peça
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="partForm">
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label for="name" class="form-label">
+                                    <i class="bi bi-gear"></i> Nome da Peça *
+                                </label>
+                                <input type="text"
+                                       class="form-control"
+                                       id="name"
+                                       name="name"
+                                       value="{{ part.name if edit else '' }}"
+                                       required
+                                       placeholder="Ex: Monitor 17 polegadas"
+                                       maxlength="100">
+                                <div class="form-text">
+                                    Nome claro e identificável da peça
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label for="part_number" class="form-label">
+                                    <i class="bi bi-upc"></i> Código da Peça
+                                </label>
+                                <input type="text"
+                                       class="form-control"
+                                       id="part_number"
+                                       name="part_number"
+                                       value="{{ part.part_number if edit else '' }}"
+                                       placeholder="Ex: MON-17-001"
+                                       maxlength="50">
+                                <div class="form-text">
+                                    Código único (opcional)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="description" class="form-label">
+                            <i class="bi bi-text-paragraph"></i> Descrição
+                        </label>
+                        <textarea class="form-control"
+                                  id="description"
+                                  name="description"
+                                  rows="3"
+                                  placeholder="Descreva detalhes importantes da peça...">{{ part.description if edit else '' }}</textarea>
+                        <div class="form-text">
+                            Informações técnicas, especificações ou observações importantes
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="category" class="form-label">
+                                    <i class="bi bi-tags"></i> Categoria *
+                                </label>
+                                <div class="input-group">
+                                    <select class="form-select" id="category" name="category" required>
+                                        <option value="">Selecione uma categoria</option>
+                                        <option value="Informática"
+                                                {% if edit and part.category == 'Informática' %}selected{% endif %}>
+                                            Informática
+                                        </option>
+                                        <option value="Eletrônicos"
+                                                {% if edit and part.category == 'Eletrônicos' %}selected{% endif %}>
+                                            Eletrônicos
+                                        </option>
+                                        <option value="Móveis"
+                                                {% if edit and part.category == 'Móveis' %}selected{% endif %}>
+                                            Móveis
+                                        </option>
+                                        <option value="Cabos"
+                                                {% if edit and part.category == 'Cabos' %}selected{% endif %}>
+                                            Cabos
+                                        </option>
+                                        <option value="Ferramentas"
+                                                {% if edit and part.category == 'Ferramentas' %}selected{% endif %}>
+                                            Ferramentas
+                                        </option>
+                                        <option value="Acessórios"
+                                                {% if edit and part.category == 'Acessórios' %}selected{% endif %}>
+                                            Acessórios
+                                        </option>
+                                        <option value="custom">✏️ Nova categoria...</option>
+                                    </select>
+                                    <button type="button" class="btn btn-outline-secondary" onclick="loadCategories()">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                </div>
+                                <input type="text"
+                                       class="form-control mt-2"
+                                       id="customCategory"
+                                       style="display: none;"
+                                       placeholder="Digite a nova categoria">
+                                <div class="form-text">
+                                    Organize as peças por tipo ou função
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="unit_measure" class="form-label">
+                                    <i class="bi bi-rulers"></i> Unidade de Medida *
+                                </label>
+                                <select class="form-select" id="unit_measure" name="unit_measure" required>
+                                    <option value="">Selecione a unidade</option>
+                                    <option value="unidade"
+                                            {% if not edit or part.unit_measure == 'unidade' %}selected{% endif %}>
+                                        Unidade
+                                    </option>
+                                    <option value="metro"
+                                            {% if edit and part.unit_measure == 'metro' %}selected{% endif %}>
+                                        Metro
+                                    </option>
+                                    <option value="quilograma"
+                                            {% if edit and part.unit_measure == 'quilograma' %}selected{% endif %}>
+                                        Quilograma
+                                    </option>
+                                    <option value="litro"
+                                            {% if edit and part.unit_measure == 'litro' %}selected{% endif %}>
+                                        Litro
+                                    </option>
+                                    <option value="caixa"
+                                            {% if edit and part.unit_measure == 'caixa' %}selected{% endif %}>
+                                        Caixa
+                                    </option>
+                                    <option value="pacote"
+                                            {% if edit and part.unit_measure == 'pacote' %}selected{% endif %}>
+                                        Pacote
+                                    </option>
+                                    <option value="rolo"
+                                            {% if edit and part.unit_measure == 'rolo' %}selected{% endif %}>
+                                        Rolo
+                                    </option>
+                                </select>
+                                <div class="form-text">
+                                    Como a peça será contabilizada
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if edit %}
+                    <div class="mb-3">
+                        <label class="form-label">
+                            <i class="bi bi-info-circle"></i> Informações Adicionais
+                        </label>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Status</small><br>
+                                        <span class="badge {{ 'bg-success' if part.is_active else 'bg-secondary' }}">
+                                            {{ 'Ativa' if part.is_active else 'Inativa' }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Criada em</small><br>
+                                        <strong>{{ part.created_at.strftime('%d/%m/%Y') }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Estoque Total</small><br>
+                                        {% set total_stock = part.stocks|sum(attribute='quantity') %}
+                                        <strong class="text-{{ 'success' if total_stock > 0 else 'danger' }}">
+                                            {{ total_stock }}
+                                        </strong>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body py-2">
+                                        <small class="text-muted">Empresas</small><br>
+                                        <strong>{{ part.stocks|length }}</strong>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <a href="{{ url_for('manage_parts') }}" class="btn btn-secondary me-md-2">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-{{ 'check-circle' if edit else 'plus-circle' }}"></i>
+                            {{ 'Atualizar' if edit else 'Criar' }} Peça
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Preview da Peça -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-eye"></i> Preview da Peça
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="text-center">
+                    <div class="avatar-lg bg-primary text-white rounded d-flex align-items-center justify-content-center mx-auto mb-3" id="partIcon">
+                        <i class="bi bi-gear" style="font-size: 2rem;"></i>
+                    </div>
+                    <h6 id="previewName">{{ part.name if edit else 'Nome da Peça' }}</h6>
+                    <p class="text-muted" id="previewDescription">
+                        {{ part.description if edit and part.description else 'Descrição aparecerá aqui...' }}
+                    </p>
+
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <div class="border-end">
+                                <div class="badge bg-primary" id="previewCategory">
+                                    {{ part.category if edit else 'Categoria' }}
+                                </div>
+                                <br><small class="text-muted">Categoria</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="badge bg-light text-dark" id="previewUnit">
+                                {{ part.unit_measure if edit else 'Unidade' }}
+                            </div>
+                            <br><small class="text-muted">Medida</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Categorias Sugeridas -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-tags"></i> Categorias por Área
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>💻 Tecnologia:</strong><br>
+                    <small class="text-muted">Informática, Eletrônicos, Cabos</small>
+                </div>
+                <div class="mb-3">
+                    <strong>🏢 Escritório:</strong><br>
+                    <small class="text-muted">Móveis, Acessórios, Papelaria</small>
+                </div>
+                <div class="mb-3">
+                    <strong>🔧 Manutenção:</strong><br>
+                    <small class="text-muted">Ferramentas, Peças de Reposição</small>
+                </div>
+                <div>
+                    <strong>🏭 Industrial:</strong><br>
+                    <small class="text-muted">Maquinário, Componentes</small>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dicas -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-lightbulb"></i> Dicas
+                </h6>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="bi bi-check2 text-success"></i>
+                        Use nomes claros e específicos
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check2 text-success"></i>
+                        Códigos ajudam na organização
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check2 text-success"></i>
+                        Descrição detalhada facilita identificação
+                    </li>
+                    <li>
+                        <i class="bi bi-check2 text-success"></i>
+                        Categorias organizam o estoque
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        {% if edit %}
+        <!-- Estatísticas Rápidas -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-graph-up"></i> Estatísticas
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-info">{{ part.request_items|length }}</div>
+                        <small class="text-muted">Solicitações</small>
+                    </div>
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-warning">{{ part.instances|length }}</div>
+                        <small class="text-muted">Instâncias</small>
+                    </div>
+                </div>
+                <hr>
+                <div class="d-grid">
+                    <a href="{{ url_for('part_history', id=part.id) }}" class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-clock-history"></i> Ver Histórico
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+// Preview em tempo real
+function updatePreview() {
+    const name = document.getElementById('name').value || 'Nome da Peça';
+    const description = document.getElementById('description').value || 'Descrição aparecerá aqui...';
+    const category = document.getElementById('category').value || 'Categoria';
+    const unit = document.getElementById('unit_measure').value || 'Unidade';
+
+    document.getElementById('previewName').textContent = name;
+    document.getElementById('previewDescription').textContent = description;
+    document.getElementById('previewCategory').textContent = category;
+    document.getElementById('previewUnit').textContent = unit;
+
+    // Atualizar ícone baseado na categoria
+    const iconMap = {
+        'Informática': 'laptop',
+        'Eletrônicos': 'cpu',
+        'Móveis': 'house',
+        'Cabos': 'ethernet',
+        'Ferramentas': 'wrench',
+        'Acessórios': 'gear'
+    };
+
+    const icon = iconMap[category] || 'gear';
+    document.querySelector('#partIcon i').className = `bi bi-${icon}`;
+}
+
+// Event listeners para preview
+document.getElementById('name').addEventListener('input', updatePreview);
+document.getElementById('description').addEventListener('input', updatePreview);
+document.getElementById('category').addEventListener('change', function() {
+    handleCategoryChange();
+    updatePreview();
+});
+document.getElementById('unit_measure').addEventListener('change', updatePreview);
+
+// Gerenciar categoria customizada
+function handleCategoryChange() {
+    const categorySelect = document.getElementById('category');
+    const customCategoryField = document.getElementById('customCategory');
+
+    if (categorySelect.value === 'custom') {
+        customCategoryField.style.display = 'block';
+        customCategoryField.required = true;
+        customCategoryField.focus();
+    } else {
+        customCategoryField.style.display = 'none';
+        customCategoryField.required = false;
+    }
+}
+
+// Carregar categorias existentes
+function loadCategories() {
+    fetch('/api/parts/categories')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const select = document.getElementById('category');
+                const currentValue = select.value;
+
+                // Limpar opções existentes (exceto padrões)
+                const defaultOptions = select.querySelectorAll('option[value=""], option[value="custom"]');
+                select.innerHTML = '';
+                defaultOptions.forEach(option => select.appendChild(option));
+
+                // Adicionar categorias
+                data.categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    select.appendChild(option);
+                });
+
+                // Adicionar opção custom no final
+                const customOption = document.createElement('option');
+                customOption.value = 'custom';
+                customOption.textContent = '✏️ Nova categoria...';
+                select.appendChild(customOption);
+
+                // Restaurar valor selecionado
+                select.value = currentValue;
+            }
+        })
+        .catch(error => console.log('Erro ao carregar categorias:', error));
+}
+
+// Validação do formulário
+document.getElementById('partForm').addEventListener('submit', function(e) {
+    const categorySelect = document.getElementById('category');
+    const customCategory = document.getElementById('customCategory');
+
+    // Se categoria customizada foi selecionada, usar o valor do campo custom
+    if (categorySelect.value === 'custom') {
+        if (!customCategory.value.trim()) {
+            e.preventDefault();
+            alert('Por favor, digite o nome da nova categoria!');
+            customCategory.focus();
+            return false;
+        }
+        // Substituir o valor do select pelo valor customizado
+        categorySelect.value = customCategory.value.trim();
+    }
+});
+
+{% if edit %}
+// Funções para ações rápidas
+function duplicatePart() {
+    if (confirm('Tem certeza que deseja duplicar esta peça?')) {
+        fetch(`/parts/{{ part.id }}/duplicate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => {
+            if (response.ok) {
+                window.location.href = response.url;
+            } else {
+                alert('Erro ao duplicar peça');
+            }
+        })
+        .catch(error => alert('Erro: ' + error));
+    }
+}
+
+function togglePartStatus() {
+    const action = {{ 'true' if part.is_active else 'false' }} ? 'desativar' : 'ativar';
+
+    if (confirm(`Tem certeza que deseja ${action} esta peça?`)) {
+        fetch(`/api/parts/{{ part.id }}/toggle-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => alert('Erro: ' + error));
+    }
+}
+{% endif %}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    updatePreview();
+    loadCategories();
+});
+</script>
+
+<style>
+.avatar-lg {
+    width: 80px;
+    height: 80px;
+}
+
+.border-end {
+    border-right: 1px solid #dee2e6 !important;
+}
+
+#customCategory {
+    transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+</style>
+
+{% endblock %}

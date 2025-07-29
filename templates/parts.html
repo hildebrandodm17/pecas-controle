@@ -1,0 +1,599 @@
+<!-- templates/parts.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestão de Peças{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-gear"></i> Gestão de Peças
+        {% if parts %}
+        <span class="badge bg-primary">{{ parts|length }}</span>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        {% if current_user.role == 'master' %}
+        <a href="{{ url_for('new_part') }}" class="btn btn-primary">
+            <i class="bi bi-plus"></i> Nova Peça
+        </a>
+        {% endif %}
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-funnel"></i> Filtros
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="?filter=all">Todas as Peças</a></li>
+                <li><a class="dropdown-item" href="?filter=active">Apenas Ativas</a></li>
+                <li><a class="dropdown-item" href="?filter=with_stock">Com Estoque</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="?category=Informática">Informática</a></li>
+                <li><a class="dropdown-item" href="?category=Eletrônicos">Eletrônicos</a></li>
+                <li><a class="dropdown-item" href="?category=Móveis">Móveis</a></li>
+                <li><a class="dropdown-item" href="?category=Cabos">Cabos</a></li>
+                <li><a class="dropdown-item" href="?category=Outros">Outros</a></li>
+            </ul>
+        </div>
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleView('table')">
+                <i class="bi bi-table"></i>
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleView('cards')">
+                <i class="bi bi-grid"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+{% if parts %}
+<!-- Resumo das Peças por Categoria -->
+<div class="row mb-4">
+    {% set categories = parts|groupby('category') %}
+    {% set category_colors = ['primary', 'success', 'info', 'warning', 'danger', 'secondary'] %}
+
+    {% for category, parts_in_category in categories %}
+    {% set loop_index = loop.index0 % 6 %}
+    <div class="col-md-6 col-lg-4 col-xl-2 mb-3">
+        <div class="card bg-{{ category_colors[loop_index] }} text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            {{ category or 'Sem Categoria' }}
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ parts_in_category|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-{{ 'laptop' if category == 'Informática' else 'cpu' if category == 'Eletrônicos' else 'house' if category == 'Móveis' else 'ethernet' if category == 'Cabos' else 'wrench' if category == 'Ferramentas' else 'gear' }} fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <small class="text-white">
+                    <i class="bi bi-boxes"></i>
+                    Ver Estoque
+                </small>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Total Geral -->
+    <div class="col-md-6 col-lg-4 col-xl-2 mb-3">
+        <div class="card bg-dark text-white h-100">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total Geral
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ parts|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-collection fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <small class="text-white">
+                    <i class="bi bi-graph-up"></i>
+                    Todas as Peças
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Campo de Busca -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="input-group">
+            <span class="input-group-text">
+                <i class="bi bi-search"></i>
+            </span>
+            <input type="text" class="form-control" id="searchInput"
+                   placeholder="Buscar por nome, código ou descrição..."
+                   onkeyup="filterParts()">
+        </div>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="categoryFilter" onchange="filterByCategory()">
+            <option value="">Todas as categorias</option>
+            {% for category in parts|map(attribute='category')|unique|list %}
+            {% if category %}
+            <option value="{{ category }}">{{ category }}</option>
+            {% endif %}
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select" id="statusFilter" onchange="filterByStatus()">
+            <option value="">Todos os status</option>
+            <option value="active">Apenas Ativas</option>
+            <option value="with_stock">Com Estoque</option>
+            <option value="without_stock">Sem Estoque</option>
+        </select>
+    </div>
+</div>
+
+<!-- Visualização em Tabela -->
+<div id="table-view" class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul"></i> Catálogo de Peças
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Peça</th>
+                        <th>Categoria</th>
+                        <th>Código</th>
+                        <th>Unidade</th>
+                        <th>Estoque Total</th>
+                        <th>Criada em</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="partsTableBody">
+                    {% for part in parts %}
+                    <tr data-part="{{ part.name|lower }} {{ part.part_number|lower if part.part_number else '' }} {{ part.description|lower if part.description else '' }}"
+                        data-category="{{ part.category or '' }}"
+                        data-status="{{ 'active' if part.is_active else 'inactive' }}">
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm bg-{{ 'primary' if part.category == 'Informática' else 'success' if part.category == 'Eletrônicos' else 'info' if part.category == 'Móveis' else 'warning' if part.category == 'Cabos' else 'secondary' }} text-white rounded d-flex align-items-center justify-content-center me-3">
+                                    <i class="bi bi-{{ 'laptop' if part.category == 'Informática' else 'cpu' if part.category == 'Eletrônicos' else 'house' if part.category == 'Móveis' else 'ethernet' if part.category == 'Cabos' else 'gear' }}"></i>
+                                </div>
+                                <div>
+                                    <strong>{{ part.name }}</strong>
+                                    {% if part.description %}
+                                    <br><small class="text-muted">{{ part.description[:60] }}{% if part.description|length > 60 %}...{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if part.category %}
+                            <span class="badge bg-{{ 'primary' if part.category == 'Informática' else 'success' if part.category == 'Eletrônicos' else 'info' if part.category == 'Móveis' else 'warning' if part.category == 'Cabos' else 'secondary' }}">
+                                {{ part.category }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if part.part_number %}
+                            <code class="bg-light p-1 rounded">{{ part.part_number }}</code>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark">{{ part.unit_measure or 'unidade' }}</span>
+                        </td>
+                        <td>
+                            {% set total_stock = 0 %}
+                            {% for stock in part.stocks %}
+                                {% set total_stock = total_stock + stock.quantity %}
+                            {% endfor %}
+
+                            {% if total_stock > 0 %}
+                            <span class="badge bg-success fs-6">{{ total_stock }}</span>
+                            {% if part.stocks|length > 1 %}
+                            <br><small class="text-muted">{{ part.stocks|length }} empresa(s)</small>
+                            {% endif %}
+                            {% else %}
+                            <span class="badge bg-danger">0</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ part.created_at.strftime('%d/%m/%Y') }}</strong>
+                            <br><small class="text-muted">{{ part.created_at.strftime('%H:%M') }}</small>
+                        </td>
+                        <td>
+                            <span class="badge {{ 'bg-success' if part.is_active else 'bg-secondary' }}">
+                                <i class="bi bi-{{ 'check-circle' if part.is_active else 'pause-circle' }}"></i>
+                                {{ 'Ativa' if part.is_active else 'Inativa' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                {% if current_user.role == 'master' %}
+                                <a href="{{ url_for('edit_part', id=part.id) }}"
+                                   class="btn btn-sm btn-outline-primary"
+                                   title="Editar peça">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                <a href="{{ url_for('manage_stock') }}?part_id={{ part.id }}"
+                                   class="btn btn-sm btn-outline-info"
+                                   title="Ver estoque">
+                                    <i class="bi bi-boxes"></i>
+                                </a>
+                                <a href="{{ url_for('generate_qr_codes') }}?part_id={{ part.id }}"
+                                   class="btn btn-sm btn-outline-secondary"
+                                   title="QR Codes">
+                                    <i class="bi bi-qr-code"></i>
+                                </a>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="{{ url_for('my_requests') }}?part_id={{ part.id }}">
+                                            <i class="bi bi-list-ul"></i> Ver Solicitações
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('reports') }}?part_id={{ part.id }}">
+                                            <i class="bi bi-graph-up"></i> Relatórios
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        {% if current_user.role == 'master' %}
+                                        <li><a class="dropdown-item text-warning" href="#" onclick="togglePartStatus({{ part.id }}, {{ part.is_active|lower }})">
+                                            <i class="bi bi-{{ 'pause' if part.is_active else 'play' }}"></i>
+                                            {{ 'Desativar' if part.is_active else 'Ativar' }}
+                                        </a></li>
+                                        {% endif %}
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Visualização em Cards -->
+<div id="cards-view" class="row" style="display: none;">
+    {% for part in parts %}
+    <div class="col-md-6 col-lg-4 mb-4" data-part="{{ part.name|lower }} {{ part.part_number|lower if part.part_number else '' }} {{ part.description|lower if part.description else '' }}"
+         data-category="{{ part.category or '' }}"
+         data-status="{{ 'active' if part.is_active else 'inactive' }}">
+        <div class="card h-100 {{ 'border-success' if part.is_active else 'border-secondary' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <div class="avatar-sm bg-{{ 'primary' if part.category == 'Informática' else 'success' if part.category == 'Eletrônicos' else 'info' if part.category == 'Móveis' else 'warning' if part.category == 'Cabos' else 'secondary' }} text-white rounded d-flex align-items-center justify-content-center me-2">
+                        <i class="bi bi-{{ 'laptop' if part.category == 'Informática' else 'cpu' if part.category == 'Eletrônicos' else 'house' if part.category == 'Móveis' else 'ethernet' if part.category == 'Cabos' else 'gear' }}"></i>
+                    </div>
+                    <h6 class="card-title mb-0">{{ part.name }}</h6>
+                </div>
+                <span class="badge {{ 'bg-success' if part.is_active else 'bg-secondary' }}">
+                    {{ 'Ativa' if part.is_active else 'Inativa' }}
+                </span>
+            </div>
+            <div class="card-body">
+                {% if part.description %}
+                <p class="card-text">
+                    <small class="text-muted">{{ part.description }}</small>
+                </p>
+                {% endif %}
+
+                <div class="mb-2">
+                    {% if part.category %}
+                    <span class="badge bg-{{ 'primary' if part.category == 'Informática' else 'success' if part.category == 'Eletrônicos' else 'info' if part.category == 'Móveis' else 'warning' if part.category == 'Cabos' else 'secondary' }}">
+                        {{ part.category }}
+                    </span>
+                    {% endif %}
+
+                    {% if part.part_number %}
+                    <span class="badge bg-light text-dark">{{ part.part_number }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <i class="bi bi-calendar"></i> Criada em {{ part.created_at.strftime('%d/%m/%Y') }}
+                    </small>
+                </div>
+
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <i class="bi bi-rulers"></i> Unidade: {{ part.unit_measure or 'unidade' }}
+                    </small>
+                </div>
+
+                <div class="row text-center">
+                    <div class="col-6">
+                        <div class="border-end">
+                            {% set total_stock = 0 %}
+                            {% for stock in part.stocks %}
+                                {% set total_stock = total_stock + stock.quantity %}
+                            {% endfor %}
+                            <div class="h5 mb-0 text-{{ 'success' if total_stock > 0 else 'danger' }}">{{ total_stock }}</div>
+                            <small class="text-muted">Estoque</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="h5 mb-0 text-info">{{ part.stocks|length }}</div>
+                        <small class="text-muted">Empresas</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="btn-group w-100">
+                    {% if current_user.role == 'master' %}
+                    <a href="{{ url_for('edit_part', id=part.id) }}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    {% endif %}
+                    <a href="{{ url_for('manage_stock') }}?part_id={{ part.id }}"
+                       class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-boxes"></i>
+                    </a>
+                    <a href="{{ url_for('generate_qr_codes') }}?part_id={{ part.id }}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-qr-code"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<!-- Estado Vazio -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-gear" style="font-size: 4rem; color: #ccc;"></i>
+        <h4 class="mt-3">Nenhuma peça cadastrada</h4>
+        <p class="text-muted">
+            {% if current_user.role == 'master' %}
+            Comece cadastrando as peças que serão usadas no sistema.
+            {% else %}
+            Aguarde o administrador cadastrar as peças do sistema.
+            {% endif %}
+        </p>
+
+        <div class="row justify-content-center mt-4">
+            <div class="col-md-8">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6>Categorias sugeridas:</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <ul class="text-start">
+                                    <li>Informática</li>
+                                    <li>Eletrônicos</li>
+                                    <li>Móveis</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <ul class="text-start">
+                                    <li>Cabos</li>
+                                    <li>Ferramentas</li>
+                                    <li>Acessórios</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if current_user.role == 'master' %}
+        <a href="{{ url_for('new_part') }}" class="btn btn-primary btn-lg mt-3">
+            <i class="bi bi-plus-circle"></i> Cadastrar Primeira Peça
+        </a>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Busca em tempo real
+function filterParts() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const tableRows = document.querySelectorAll('#partsTableBody tr[data-part]');
+    const cardItems = document.querySelectorAll('#cards-view .col-md-6[data-part]');
+
+    // Filtrar tabela
+    tableRows.forEach(row => {
+        const partData = row.getAttribute('data-part');
+        row.style.display = partData.includes(searchTerm) ? '' : 'none';
+    });
+
+    // Filtrar cards
+    cardItems.forEach(card => {
+        const partData = card.getAttribute('data-part');
+        card.style.display = partData.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+// Filtrar por categoria
+function filterByCategory() {
+    const selectedCategory = document.getElementById('categoryFilter').value;
+    const tableRows = document.querySelectorAll('#partsTableBody tr[data-category]');
+    const cardItems = document.querySelectorAll('#cards-view .col-md-6[data-category]');
+
+    // Filtrar tabela
+    tableRows.forEach(row => {
+        const partCategory = row.getAttribute('data-category');
+        row.style.display = (!selectedCategory || partCategory === selectedCategory) ? '' : 'none';
+    });
+
+    // Filtrar cards
+    cardItems.forEach(card => {
+        const partCategory = card.getAttribute('data-category');
+        card.style.display = (!selectedCategory || partCategory === selectedCategory) ? '' : 'none';
+    });
+}
+
+// Filtrar por status
+function filterByStatus() {
+    const selectedStatus = document.getElementById('statusFilter').value;
+    const tableRows = document.querySelectorAll('#partsTableBody tr[data-status]');
+    const cardItems = document.querySelectorAll('#cards-view .col-md-6[data-status]');
+
+    // Filtrar tabela
+    tableRows.forEach(row => {
+        const partStatus = row.getAttribute('data-status');
+        let show = true;
+
+        if (selectedStatus === 'active' && partStatus !== 'active') {
+            show = false;
+        } else if (selectedStatus === 'with_stock') {
+            // Verificar se tem estoque (simplificado)
+            const stockBadge = row.querySelector('.badge.bg-success');
+            if (!stockBadge) show = false;
+        } else if (selectedStatus === 'without_stock') {
+            const stockBadge = row.querySelector('.badge.bg-danger');
+            if (!stockBadge) show = false;
+        }
+
+        row.style.display = show ? '' : 'none';
+    });
+
+    // Filtrar cards (lógica similar)
+    cardItems.forEach(card => {
+        const partStatus = card.getAttribute('data-status');
+        let show = true;
+
+        if (selectedStatus === 'active' && partStatus !== 'active') {
+            show = false;
+        }
+        // Adicionar lógica similar para cards se necessário
+
+        card.style.display = show ? '' : 'none';
+    });
+}
+
+// Toggle entre visualizações
+function toggleView(viewType) {
+    const tableView = document.getElementById('table-view');
+    const cardsView = document.getElementById('cards-view');
+
+    if (viewType === 'table') {
+        tableView.style.display = 'block';
+        cardsView.style.display = 'none';
+    } else {
+        tableView.style.display = 'none';
+        cardsView.style.display = 'flex';
+    }
+}
+
+// Toggle status da peça
+function togglePartStatus(partId, isActive) {
+    const action = isActive ? 'desativar' : 'ativar';
+
+    if (confirm(`Tem certeza que deseja ${action} esta peça?`)) {
+        fetch(`/api/parts/${partId}/toggle-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao alterar status: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erro na comunicação: ' + error);
+        });
+    }
+}
+
+// Combinação de filtros
+function applyAllFilters() {
+    filterParts();
+    filterByCategory();
+    filterByStatus();
+}
+
+// Event listeners para filtros combinados
+document.getElementById('searchInput').addEventListener('input', applyAllFilters);
+document.getElementById('categoryFilter').addEventListener('change', applyAllFilters);
+document.getElementById('statusFilter').addEventListener('change', applyAllFilters);
+
+// Animação dos cards de categoria
+document.addEventListener('DOMContentLoaded', function() {
+    const categoryCards = document.querySelectorAll('.card.bg-primary, .card.bg-success, .card.bg-info, .card.bg-warning, .card.bg-danger, .card.bg-secondary, .card.bg-dark');
+
+    categoryCards.forEach((card, index) => {
+        card.style.opacity = '0';
+        card.style.transform = 'translateY(20px)';
+
+        setTimeout(() => {
+            card.style.transition = 'all 0.5s ease';
+            card.style.opacity = '1';
+            card.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+});
+</script>
+
+<style>
+.avatar-sm {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+}
+
+.border-end {
+    border-right: 1px solid #dee2e6 !important;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+code {
+    font-size: 0.875em;
+}
+
+.badge {
+    font-size: 0.75rem;
+}
+
+@media (max-width: 768px) {
+    .btn-group {
+        flex-direction: column;
+    }
+
+    .btn-group .btn {
+        margin-bottom: 2px;
+    }
+
+    .col-xl-2 {
+        min-width: 50%;
+    }
+}
+</style>
+
+{% endblock %}

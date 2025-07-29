@@ -1,0 +1,480 @@
+<!-- templates/companies.html -->
+{% extends "base.html" %}
+
+{% block title %}Gestão de Empresas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-building"></i> Gestão de Empresas
+        {% if companies %}
+        <span class="badge bg-primary">{{ companies|length }}</span>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('new_company') }}" class="btn btn-primary">
+            <i class="bi bi-plus"></i> Nova Empresa
+        </a>
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-funnel"></i> Filtros
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="?filter=all">Todas as Empresas</a></li>
+                <li><a class="dropdown-item" href="?filter=active">Apenas Ativas</a></li>
+                <li><a class="dropdown-item" href="?filter=recent">Recém Criadas</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="?sort=name">Ordenar por Nome</a></li>
+                <li><a class="dropdown-item" href="?sort=date">Ordenar por Data</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+{% if companies %}
+<!-- Resumo Rápido -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Empresas
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ companies|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-building fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Empresas Ativas
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ companies|selectattr('is_active')|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-check-circle fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total de Usuários
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {% set total_users = 0 %}
+                            {% for company in companies %}
+                                {% set total_users = total_users + company.users|length %}
+                            {% endfor %}
+                            {{ total_users }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-people fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Criadas Este Mês
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {% set this_month = now.month %}
+                            {% set this_year = now.year %}
+                            {{ companies|selectattr('created_at')|selectattr('created_at.month', 'equalto', this_month)|selectattr('created_at.year', 'equalto', this_year)|list|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-calendar-plus fa-2x opacity-75"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Campo de Busca -->
+<div class="row mb-3">
+    <div class="col-md-6">
+        <div class="input-group">
+            <span class="input-group-text">
+                <i class="bi bi-search"></i>
+            </span>
+            <input type="text" class="form-control" id="searchInput"
+                   placeholder="Buscar por nome, CNPJ ou email..."
+                   onkeyup="filterCompanies()">
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="btn-group w-100">
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleView('table')">
+                <i class="bi bi-table"></i> Tabela
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="toggleView('cards')">
+                <i class="bi bi-grid"></i> Cards
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Visualização em Tabela -->
+<div id="table-view" class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-ul"></i> Lista de Empresas
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>CNPJ</th>
+                        <th>Email</th>
+                        <th>Usuários</th>
+                        <th>Criada em</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="companiesTableBody">
+                    {% for company in companies %}
+                    <tr data-company="{{ company.name|lower }} {{ company.cnpj|lower }} {{ company.contact_email|lower }}">
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-3">
+                                    {{ company.name[0]|upper }}
+                                </div>
+                                <div>
+                                    <strong>{{ company.name }}</strong>
+                                    {% if company.address %}
+                                    <br><small class="text-muted">{{ company.address[:50] }}{% if company.address|length > 50 %}...{% endif %}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if company.cnpj %}
+                            <code>{{ company.cnpj }}</code>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if company.contact_email %}
+                            <a href="mailto:{{ company.contact_email }}" class="text-decoration-none">
+                                {{ company.contact_email }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info fs-6">{{ company.users|length }}</span>
+                            {% if company.users|length > 0 %}
+                            <br><small class="text-muted">
+                                {% set active_users = company.users|selectattr('is_active')|list|length %}
+                                {{ active_users }} ativo(s)
+                            </small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ company.created_at.strftime('%d/%m/%Y') }}</strong>
+                            <br><small class="text-muted">{{ company.created_at.strftime('%H:%M') }}</small>
+                        </td>
+                        <td>
+                            <span class="badge {{ 'bg-success' if company.is_active else 'bg-secondary' }}">
+                                {{ 'Ativa' if company.is_active else 'Inativa' }}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <a href="{{ url_for('edit_company', id=company.id) }}"
+                                   class="btn btn-sm btn-outline-primary"
+                                   title="Editar empresa">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <a href="{{ url_for('manage_users') }}?company_id={{ company.id }}"
+                                   class="btn btn-sm btn-outline-info"
+                                   title="Gerenciar usuários">
+                                    <i class="bi bi-people"></i>
+                                </a>
+                                <a href="{{ url_for('manage_stock') }}?company_id={{ company.id }}"
+                                   class="btn btn-sm btn-outline-success"
+                                   title="Ver estoque">
+                                    <i class="bi bi-boxes"></i>
+                                </a>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                                        <i class="bi bi-three-dots"></i>
+                                    </button>
+                                    <ul class="dropdown-menu">
+                                        <li><a class="dropdown-item" href="{{ url_for('reports') }}?company_id={{ company.id }}">
+                                            <i class="bi bi-graph-up"></i> Relatórios
+                                        </a></li>
+                                        <li><a class="dropdown-item" href="{{ url_for('manage_locations') }}?company_id={{ company.id }}">
+                                            <i class="bi bi-geo-alt"></i> Locais
+                                        </a></li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li><a class="dropdown-item text-danger" href="#" onclick="toggleCompanyStatus({{ company.id }}, {{ company.is_active|lower }})">
+                                            <i class="bi bi-{{ 'pause' if company.is_active else 'play' }}"></i>
+                                            {{ 'Desativar' if company.is_active else 'Ativar' }}
+                                        </a></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Visualização em Cards -->
+<div id="cards-view" class="row" style="display: none;">
+    {% for company in companies %}
+    <div class="col-md-6 col-lg-4 mb-4" data-company="{{ company.name|lower }} {{ company.cnpj|lower }} {{ company.contact_email|lower }}">
+        <div class="card h-100 {{ 'border-success' if company.is_active else 'border-secondary' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="card-title mb-0">
+                    <div class="avatar-sm bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center me-2">
+                        {{ company.name[0]|upper }}
+                    </div>
+                    {{ company.name }}
+                </h6>
+                <span class="badge {{ 'bg-success' if company.is_active else 'bg-secondary' }}">
+                    {{ 'Ativa' if company.is_active else 'Inativa' }}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="mb-2">
+                    {% if company.cnpj %}
+                    <small class="text-muted">
+                        <i class="bi bi-card-text"></i> CNPJ: <code>{{ company.cnpj }}</code>
+                    </small><br>
+                    {% endif %}
+
+                    {% if company.contact_email %}
+                    <small class="text-muted">
+                        <i class="bi bi-envelope"></i>
+                        <a href="mailto:{{ company.contact_email }}" class="text-decoration-none">
+                            {{ company.contact_email }}
+                        </a>
+                    </small><br>
+                    {% endif %}
+
+                    <small class="text-muted">
+                        <i class="bi bi-calendar"></i> Criada em {{ company.created_at.strftime('%d/%m/%Y') }}
+                    </small>
+                </div>
+
+                {% if company.address %}
+                <div class="mb-2">
+                    <small class="text-muted">
+                        <i class="bi bi-geo-alt"></i> {{ company.address[:80] }}{% if company.address|length > 80 %}...{% endif %}
+                    </small>
+                </div>
+                {% endif %}
+
+                <div class="row text-center">
+                    <div class="col-4">
+                        <div class="border-end">
+                            <div class="h5 mb-0 text-primary">{{ company.users|length }}</div>
+                            <small class="text-muted">Usuários</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="border-end">
+                            <div class="h5 mb-0 text-success">{{ company.users|selectattr('is_active')|list|length }}</div>
+                            <small class="text-muted">Ativos</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="h5 mb-0 text-info">{{ company.locations|length if company.locations else 0 }}</div>
+                        <small class="text-muted">Locais</small>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="btn-group w-100">
+                    <a href="{{ url_for('edit_company', id=company.id) }}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                    <a href="{{ url_for('manage_users') }}?company_id={{ company.id }}"
+                       class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-people"></i>
+                    </a>
+                    <a href="{{ url_for('manage_stock') }}?company_id={{ company.id }}"
+                       class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-boxes"></i>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<!-- Estado Vazio -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-building" style="font-size: 4rem; color: #ccc;"></i>
+        <h4 class="mt-3">Nenhuma empresa cadastrada</h4>
+        <p class="text-muted">Comece cadastrando a primeira empresa do sistema.</p>
+
+        <div class="row justify-content-center mt-4">
+            <div class="col-md-6">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6>Próximos passos:</h6>
+                        <ol class="text-start">
+                            <li>Cadastrar empresa</li>
+                            <li>Criar usuários administradores</li>
+                            <li>Configurar locais e equipamentos</li>
+                            <li>Adicionar peças ao catálogo</li>
+                        </ol>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <a href="{{ url_for('new_company') }}" class="btn btn-primary btn-lg mt-3">
+            <i class="bi bi-plus-circle"></i> Cadastrar Primeira Empresa
+        </a>
+    </div>
+</div>
+{% endif %}
+
+<script>
+// Busca em tempo real
+function filterCompanies() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const tableRows = document.querySelectorAll('#companiesTableBody tr[data-company]');
+    const cardItems = document.querySelectorAll('#cards-view .col-md-6[data-company]');
+
+    // Filtrar tabela
+    tableRows.forEach(row => {
+        const companyData = row.getAttribute('data-company');
+        row.style.display = companyData.includes(searchTerm) ? '' : 'none';
+    });
+
+    // Filtrar cards
+    cardItems.forEach(card => {
+        const companyData = card.getAttribute('data-company');
+        card.style.display = companyData.includes(searchTerm) ? '' : 'none';
+    });
+}
+
+// Toggle entre visualizações
+function toggleView(viewType) {
+    const tableView = document.getElementById('table-view');
+    const cardsView = document.getElementById('cards-view');
+
+    if (viewType === 'table') {
+        tableView.style.display = 'block';
+        cardsView.style.display = 'none';
+    } else {
+        tableView.style.display = 'none';
+        cardsView.style.display = 'flex';
+    }
+}
+
+// Toggle status da empresa
+function toggleCompanyStatus(companyId, isActive) {
+    const action = isActive ? 'desativar' : 'ativar';
+
+    if (confirm(`Tem certeza que deseja ${action} esta empresa?`)) {
+        fetch(`/api/companies/${companyId}/toggle-status`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro ao alterar status: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erro na comunicação: ' + error);
+        });
+    }
+}
+
+// Avatar com iniciais
+document.addEventListener('DOMContentLoaded', function() {
+    const avatars = document.querySelectorAll('.avatar-sm');
+    avatars.forEach(avatar => {
+        const colors = ['bg-primary', 'bg-success', 'bg-info', 'bg-warning', 'bg-danger', 'bg-secondary'];
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        avatar.className = avatar.className.replace('bg-primary', randomColor);
+    });
+});
+</script>
+
+<style>
+.avatar-sm {
+    width: 40px;
+    height: 40px;
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+.border-end {
+    border-right: 1px solid #dee2e6 !important;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .btn-group {
+        flex-direction: column;
+    }
+
+    .btn-group .btn {
+        margin-bottom: 2px;
+    }
+}
+</style>
+
+{% endblock %}

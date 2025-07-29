@@ -1,0 +1,446 @@
+<!-- templates/my_requests.html -->
+{% extends "base.html" %}
+
+{% block title %}
+{% if current_user.role == 'master' %}Todas as Solicitações
+{% elif current_user.role == 'admin' %}Solicitações da Empresa
+{% else %}Minhas Solicitações
+{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        {% if current_user.role == 'master' %}
+        <i class="bi bi-list-ul"></i> Todas as Solicitações
+        {% elif current_user.role == 'admin' %}
+        <i class="bi bi-building"></i> Solicitações da Empresa
+        {% else %}
+        <i class="bi bi-person"></i> Minhas Solicitações
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        {% if current_user.role in ['solicitante', 'admin', 'master'] %}
+        <a href="{{ url_for('new_request') }}" class="btn btn-primary">
+            <i class="bi bi-plus"></i> Nova Solicitação
+        </a>
+        {% endif %}
+
+        {% if current_user.role in ['receptor', 'admin', 'master'] %}
+        <a href="{{ url_for('pending_requests') }}" class="btn btn-outline-warning ms-2">
+            <i class="bi bi-clock"></i> Pendentes
+        </a>
+        {% endif %}
+
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-funnel"></i> Filtros
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="?status=all">Todas</a></li>
+                <li><a class="dropdown-item" href="?status=pendente">Pendentes</a></li>
+                <li><a class="dropdown-item" href="?status=enviado">Enviadas</a></li>
+                <li><a class="dropdown-item" href="?status=recebido">Recebidas</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="?period=today">Hoje</a></li>
+                <li><a class="dropdown-item" href="?period=week">Esta Semana</a></li>
+                <li><a class="dropdown-item" href="?period=month">Este Mês</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Resumo das Solicitações -->
+<div class="row mb-4">
+    {% set pending_count = requests|selectattr('status', 'equalto', 'pendente')|list|length %}
+    {% set sent_count = requests|selectattr('status', 'equalto', 'enviado')|list|length %}
+    {% set received_count = requests|selectattr('status', 'equalto', 'recebido')|list|length %}
+
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Pendentes
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ pending_count }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-clock fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Enviadas
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ sent_count }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-truck fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Recebidas
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ received_count }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-check-circle fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-uppercase mb-1">
+                            Total
+                        </div>
+                        <div class="h4 mb-0 font-weight-bold">
+                            {{ requests|length }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="bi bi-list-ul fa-2x"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de Solicitações -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-check"></i> Lista de Solicitações
+        </h5>
+    </div>
+    <div class="card-body">
+        {% if requests %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Solicitante</th>
+                        <th>Local</th>
+                        <th>Equipamento</th>
+                        <th>Itens</th>
+                        <th>Status</th>
+                        <th>Data</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for request in requests %}
+                    <tr class="{% if request.status == 'pendente' %}table-warning{% elif request.status == 'enviado' %}table-info{% elif request.status == 'recebido' %}table-success{% endif %}">
+                        <td>
+                            <strong>#{{ request.id }}</strong>
+                        </td>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <i class="bi bi-person-circle me-2"></i>
+                                <div>
+                                    <strong>{{ request.requester.username }}</strong>
+                                    {% if current_user.role in ['master', 'admin'] %}
+                                    <br><small class="text-muted">{{ request.requester.email }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            <i class="bi bi-geo-alt text-primary"></i>
+                            {{ request.location.name }}
+                        </td>
+                        <td>
+                            {% if request.equipment %}
+                            <i class="bi bi-tools text-secondary"></i>
+                            {{ request.equipment.name }}
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set total_items = request.items|sum(attribute='quantity_requested') %}
+                            {% set total_sent = request.items|sum(attribute='quantity_sent') %}
+                            {% set total_received = request.items|sum(attribute='quantity_received') %}
+
+                            <div class="progress" style="height: 20px;">
+                                {% if request.status == 'pendente' %}
+                                <div class="progress-bar bg-warning" style="width: 100%">
+                                    {{ total_items }} item(s)
+                                </div>
+                                {% elif request.status == 'enviado' %}
+                                <div class="progress-bar bg-info" style="width: {{ (total_sent / total_items * 100) if total_items > 0 else 0 }}%">
+                                    {{ total_sent }}/{{ total_items }}
+                                </div>
+                                {% else %}
+                                <div class="progress-bar bg-success" style="width: 100%">
+                                    {{ total_received }} recebido(s)
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <span class="badge badge-status
+                                {% if request.status == 'pendente' %}bg-warning
+                                {% elif request.status == 'enviado' %}bg-info
+                                {% elif request.status == 'recebido' %}bg-success
+                                {% else %}bg-secondary
+                                {% endif %}">
+                                {% if request.status == 'pendente' %}
+                                <i class="bi bi-clock"></i> Pendente
+                                {% elif request.status == 'enviado' %}
+                                <i class="bi bi-truck"></i> Enviado
+                                {% elif request.status == 'recebido' %}
+                                <i class="bi bi-check-circle"></i> Recebido
+                                {% else %}
+                                {{ request.status|title }}
+                                {% endif %}
+                            </span>
+                        </td>
+                        <td>
+                            <div>
+                                <strong>{{ request.created_at.strftime('%d/%m/%Y') }}</strong>
+                                <br><small class="text-muted">{{ request.created_at.strftime('%H:%M') }}</small>
+                            </div>
+                        </td>
+                        <td>
+                            <div class="btn-group-vertical">
+                                <a href="{{ url_for('view_request', id=request.id) }}"
+                                   class="btn btn-sm btn-outline-primary mb-1"
+                                   title="Ver detalhes">
+                                    <i class="bi bi-eye"></i> Ver
+                                </a>
+
+                                {% if request.status == 'pendente' and current_user.role in ['receptor', 'admin', 'master'] %}
+                                <a href="{{ url_for('ship_request', id=request.id) }}"
+                                   class="btn btn-sm btn-outline-success mb-1"
+                                   title="Enviar peças">
+                                    <i class="bi bi-send"></i> Enviar
+                                </a>
+                                {% endif %}
+
+                                {% if request.status == 'enviado' and (current_user.role in ['admin', 'receptor'] or request.requester_id == current_user.id) %}
+                                <button class="btn btn-sm btn-outline-info"
+                                        onclick="markAsReceived({{ request.id }})"
+                                        title="Marcar como recebido">
+                                    <i class="bi bi-check2-circle"></i> Receber
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+            <h4 class="mt-3">Nenhuma solicitação encontrada</h4>
+            <p class="text-muted">
+                {% if current_user.role in ['solicitante', 'admin', 'master'] %}
+                Crie sua primeira solicitação de peças.
+                {% else %}
+                Aguarde novas solicitações chegarem.
+                {% endif %}
+            </p>
+            {% if current_user.role in ['solicitante', 'admin', 'master'] %}
+            <a href="{{ url_for('new_request') }}" class="btn btn-primary">
+                <i class="bi bi-plus"></i> Criar Primeira Solicitação
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal de Confirmação para Recebimento -->
+<div class="modal fade" id="confirmReceiveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-check-circle"></i> Confirmar Recebimento
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Confirma que todas as peças da solicitação foram recebidas?</p>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Importante:</strong> Esta ação não pode ser desfeita.
+                    Certifique-se de que todos os itens foram entregues corretamente.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x"></i> Cancelar
+                </button>
+                <button type="button" class="btn btn-success" id="confirmReceiveBtn">
+                    <i class="bi bi-check"></i> Sim, Confirmar Recebimento
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentRequestId = null;
+
+function markAsReceived(requestId) {
+    currentRequestId = requestId;
+    const modal = new bootstrap.Modal(document.getElementById('confirmReceiveModal'));
+    modal.show();
+}
+
+document.getElementById('confirmReceiveBtn').addEventListener('click', function() {
+    if (currentRequestId) {
+        fetch(`/api/requests/${currentRequestId}/receive`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Fechar modal
+                bootstrap.Modal.getInstance(document.getElementById('confirmReceiveModal')).hide();
+
+                // Mostrar mensagem de sucesso
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success alert-dismissible fade show';
+                alert.innerHTML = `
+                    <i class="bi bi-check-circle"></i> ${data.message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.container-fluid main').insertBefore(alert, document.querySelector('.container-fluid main').firstChild);
+
+                // Recarregar página após 2 segundos
+                setTimeout(() => {
+                    location.reload();
+                }, 2000);
+            } else {
+                alert('Erro ao marcar como recebido: ' + data.message);
+            }
+        })
+        .catch(error => {
+            alert('Erro na comunicação: ' + error);
+        });
+    }
+});
+
+// Auto-atualizar lista a cada 2 minutos
+setInterval(() => {
+    // Só recarrega se não houver modais abertos
+    if (!document.querySelector('.modal.show')) {
+        location.reload();
+    }
+}, 120000);
+
+// Filtro em tempo real
+function filterTable() {
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        const filter = searchInput.value.toLowerCase();
+        const rows = document.querySelectorAll('tbody tr');
+
+        rows.forEach(row => {
+            const text = row.textContent.toLowerCase();
+            row.style.display = text.includes(filter) ? '' : 'none';
+        });
+    }
+}
+
+// Adicionar campo de busca se houver muitas solicitações
+if ({{ requests|length }} > 10) {
+    const searchDiv = document.createElement('div');
+    searchDiv.className = 'mb-3';
+    searchDiv.innerHTML = `
+        <input type="text" id="searchInput" class="form-control"
+               placeholder="🔍 Buscar por ID, solicitante, local..."
+               onkeyup="filterTable()">
+    `;
+    document.querySelector('.table-responsive').parentNode.insertBefore(searchDiv, document.querySelector('.table-responsive'));
+}
+</script>
+
+<style>
+.badge-status {
+    font-size: 0.75rem;
+    padding: 0.5em 0.75em;
+}
+
+.progress {
+    font-size: 0.75rem;
+    text-align: center;
+    color: white;
+    font-weight: bold;
+}
+
+.table-warning {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+.table-info {
+    background-color: rgba(13, 202, 240, 0.1);
+}
+
+.table-success {
+    background-color: rgba(25, 135, 84, 0.1);
+}
+
+.btn-group-vertical .btn {
+    margin-bottom: 2px;
+}
+
+.card-body .bi {
+    vertical-align: middle;
+}
+
+@media (max-width: 768px) {
+    .btn-group-vertical {
+        display: flex;
+        flex-direction: row;
+        gap: 2px;
+    }
+
+    .btn-group-vertical .btn {
+        margin-bottom: 0;
+        flex: 1;
+        font-size: 0.8rem;
+    }
+}
+</style>
+{% endblock %}

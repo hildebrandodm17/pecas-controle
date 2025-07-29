@@ -1,0 +1,520 @@
+<!-- templates/company_form.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ 'Editar' if company else 'Nova' }} Empresa{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-building"></i> {{ 'Editar' if company else 'Nova' }} Empresa
+        {% if company %}
+        <small class="text-muted">ID: {{ company.id }}</small>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manage_companies') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+        {% if company %}
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-info dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-gear"></i> Ações
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="{{ url_for('manage_users') }}?company_id={{ company.id }}">
+                    <i class="bi bi-people"></i> Gerenciar Usuários
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('manage_stock') }}?company_id={{ company.id }}">
+                    <i class="bi bi-boxes"></i> Ver Estoque
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('reports') }}?company_id={{ company.id }}">
+                    <i class="bi bi-graph-up"></i> Relatórios
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="{{ url_for('manage_locations') }}?company_id={{ company.id }}">
+                    <i class="bi bi-geo-alt"></i> Locais
+                </a></li>
+                <li><a class="dropdown-item" href="{{ url_for('manage_equipments') }}?company_id={{ company.id }}">
+                    <i class="bi bi-tools"></i> Equipamentos
+                </a></li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-building-add"></i>
+                    {{ 'Informações da Empresa' if company else 'Cadastrar Nova Empresa' }}
+                </h5>
+            </div>
+            <div class="card-body">
+                <form method="POST" id="company-form" novalidate>
+                    <!-- Nome da Empresa -->
+                    <div class="mb-3">
+                        <label for="name" class="form-label">
+                            Nome da Empresa *
+                            <i class="bi bi-info-circle" data-bs-toggle="tooltip"
+                               title="Nome fantasia ou razão social da empresa"></i>
+                        </label>
+                        <input type="text" class="form-control" id="name" name="name"
+                               value="{{ company.name if company else '' }}"
+                               placeholder="Digite o nome da empresa" required
+                               maxlength="100">
+                        <div class="form-text">
+                            Nome fantasia ou razão social da empresa
+                        </div>
+                        <div class="invalid-feedback">
+                            Por favor, informe o nome da empresa.
+                        </div>
+                    </div>
+
+                    <!-- CNPJ -->
+                    <div class="mb-3">
+                        <label for="cnpj" class="form-label">
+                            CNPJ
+                            <span class="badge bg-secondary">Opcional</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-card-text"></i>
+                            </span>
+                            <input type="text" class="form-control" id="cnpj" name="cnpj"
+                                   value="{{ company.cnpj if company else '' }}"
+                                   placeholder="00.000.000/0000-00"
+                                   pattern="[0-9]{2}\.[0-9]{3}\.[0-9]{3}/[0-9]{4}-[0-9]{2}"
+                                   maxlength="18">
+                        </div>
+                        <div class="form-text">
+                            CNPJ da empresa no formato: 00.000.000/0000-00
+                        </div>
+                        <div class="invalid-feedback">
+                            CNPJ deve estar no formato correto: 00.000.000/0000-00
+                        </div>
+                    </div>
+
+                    <!-- Email de Contato -->
+                    <div class="mb-3">
+                        <label for="contact_email" class="form-label">
+                            Email de Contato
+                            <span class="badge bg-info">Recomendado</span>
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="bi bi-envelope"></i>
+                            </span>
+                            <input type="email" class="form-control" id="contact_email" name="contact_email"
+                                   value="{{ company.contact_email if company else '' }}"
+                                   placeholder="contato@empresa.com">
+                        </div>
+                        <div class="form-text">
+                            Email principal para contato e notificações
+                        </div>
+                        <div class="invalid-feedback">
+                            Por favor, informe um email válido.
+                        </div>
+                    </div>
+
+                    <!-- Endereço Completo -->
+                    <div class="mb-4">
+                        <label for="address" class="form-label">
+                            Endereço Completo
+                            <i class="bi bi-info-circle" data-bs-toggle="tooltip"
+                               title="Endereço completo da sede da empresa"></i>
+                        </label>
+                        <textarea class="form-control" id="address" name="address" rows="4"
+                                  placeholder="Rua, número, bairro, cidade, estado, CEP">{{ company.address if company else '' }}</textarea>
+                        <div class="form-text">
+                            Endereço completo da sede da empresa
+                        </div>
+                    </div>
+
+                    <!-- Botões de Ação -->
+                    <hr>
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetForm()">
+                            <i class="bi bi-arrow-clockwise"></i> Limpar
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="submitBtn">
+                            <i class="bi bi-check-circle"></i>
+                            {{ 'Atualizar Empresa' if company else 'Criar Empresa' }}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Preview Card (para nova empresa) -->
+        {% if not company %}
+        <div class="card mt-4" id="previewCard" style="display: none;">
+            <div class="card-header bg-light">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-eye"></i> Preview da Empresa
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-auto">
+                        <div class="avatar-lg bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" id="previewAvatar">
+                            ?
+                        </div>
+                    </div>
+                    <div class="col">
+                        <h6 id="previewName">Nome da Empresa</h6>
+                        <p class="mb-1" id="previewCNPJ" style="display: none;">
+                            <small class="text-muted">CNPJ: <span></span></small>
+                        </p>
+                        <p class="mb-1" id="previewEmail" style="display: none;">
+                            <small class="text-muted">
+                                <i class="bi bi-envelope"></i> <span></span>
+                            </small>
+                        </p>
+                        <p class="mb-0" id="previewAddress" style="display: none;">
+                            <small class="text-muted">
+                                <i class="bi bi-geo-alt"></i> <span></span>
+                            </small>
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    {{ 'Informações' if company else 'Orientações' }}
+                </h6>
+            </div>
+            <div class="card-body">
+                {% if company %}
+                <!-- Informações da empresa existente -->
+                <div class="mb-3">
+                    <small class="text-muted">Criada em:</small><br>
+                    <strong>{{ company.created_at.strftime('%d/%m/%Y às %H:%M') }}</strong>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted">Usuários cadastrados:</small><br>
+                    <span class="badge bg-info fs-6">{{ company.users|length }}</span>
+                    {% if company.users|length > 0 %}
+                    <br><small class="text-muted">
+                        {{ company.users|selectattr('is_active')|list|length }} ativo(s)
+                    </small>
+                    {% endif %}
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted">Status:</small><br>
+                    <span class="badge {{ 'bg-success' if company.is_active else 'bg-secondary' }} fs-6">
+                        {{ 'Ativa' if company.is_active else 'Inativa' }}
+                    </span>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted">Locais cadastrados:</small><br>
+                    <span class="badge bg-secondary fs-6">{{ company.locations|length if company.locations else 0 }}</span>
+                </div>
+
+                <hr>
+
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('manage_users') }}?company_id={{ company.id }}"
+                       class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-people"></i> Gerenciar Usuários
+                    </a>
+                    <a href="{{ url_for('manage_stock') }}?company_id={{ company.id }}"
+                       class="btn btn-outline-info btn-sm">
+                        <i class="bi bi-boxes"></i> Ver Estoque
+                    </a>
+                    <a href="{{ url_for('reports') }}?company_id={{ company.id }}"
+                       class="btn btn-outline-success btn-sm">
+                        <i class="bi bi-graph-up"></i> Relatórios
+                    </a>
+                </div>
+
+                {% else %}
+                <!-- Orientações para nova empresa -->
+                <div class="alert alert-info">
+                    <i class="bi bi-lightbulb"></i>
+                    <strong>Dica:</strong> Após criar a empresa, você poderá cadastrar usuários e configurar o estoque.
+                </div>
+
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6>Próximos passos:</h6>
+                        <ol class="mb-0">
+                            <li>Criar a empresa</li>
+                            <li>Cadastrar usuários administradores</li>
+                            <li>Configurar locais e equipamentos</li>
+                            <li>Adicionar peças ao catálogo</li>
+                            <li>Configurar estoque inicial</li>
+                        </ol>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <h6>Campos obrigatórios:</h6>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-check text-success"></i> Nome da empresa</li>
+                        <li><i class="bi bi-info text-info"></i> CNPJ (opcional)</li>
+                        <li><i class="bi bi-info text-info"></i> Email (recomendado)</li>
+                        <li><i class="bi bi-info text-info"></i> Endereço (opcional)</li>
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Dicas de Preenchimento -->
+        <div class="card mt-3">
+            <div class="card-header">
+                <h6 class="card-title mb-0">
+                    <i class="bi bi-lightbulb"></i> Dicas de Preenchimento
+                </h6>
+            </div>
+            <div class="card-body">
+                <small>
+                    <ul class="mb-0">
+                        <li><strong>Nome:</strong> Use o nome oficial da empresa</li>
+                        <li><strong>CNPJ:</strong> Será formatado automaticamente</li>
+                        <li><strong>Email:</strong> Usado para notificações do sistema</li>
+                        <li><strong>Endereço:</strong> Inclua CEP para melhor localização</li>
+                    </ul>
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Máscara para CNPJ
+document.getElementById('cnpj').addEventListener('input', function(e) {
+    let value = e.target.value.replace(/\D/g, '');
+
+    if (value.length <= 14) {
+        value = value.replace(/^(\d{2})(\d)/, '$1.$2');
+        value = value.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+        value = value.replace(/\.(\d{3})(\d)/, '.$1/$2');
+        value = value.replace(/(\d{4})(\d)/, '$1-$2');
+
+        e.target.value = value;
+    }
+});
+
+// Validação em tempo real
+function validateForm() {
+    const form = document.getElementById('company-form');
+    const inputs = form.querySelectorAll('input[required]');
+    let isValid = true;
+
+    inputs.forEach(input => {
+        if (!input.value.trim()) {
+            input.classList.add('is-invalid');
+            isValid = false;
+        } else {
+            input.classList.remove('is-invalid');
+            input.classList.add('is-valid');
+        }
+    });
+
+    // Validação específica do CNPJ
+    const cnpjInput = document.getElementById('cnpj');
+    if (cnpjInput.value && cnpjInput.value.length < 18) {
+        cnpjInput.classList.add('is-invalid');
+        isValid = false;
+    }
+
+    // Validação do email
+    const emailInput = document.getElementById('contact_email');
+    if (emailInput.value && !emailInput.value.includes('@')) {
+        emailInput.classList.add('is-invalid');
+        isValid = false;
+    }
+
+    return isValid;
+}
+
+// Validação do formulário
+document.getElementById('company-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    if (validateForm()) {
+        // Mostrar loading no botão
+        const submitBtn = document.getElementById('submitBtn');
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Processando...';
+        submitBtn.disabled = true;
+
+        // Enviar formulário
+        setTimeout(() => {
+            this.submit();
+        }, 500);
+    } else {
+        // Scroll para o primeiro erro
+        const firstError = document.querySelector('.is-invalid');
+        if (firstError) {
+            firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstError.focus();
+        }
+    }
+});
+
+// Preview em tempo real (para nova empresa)
+{% if not company %}
+document.addEventListener('DOMContentLoaded', function() {
+    const nameInput = document.getElementById('name');
+    const cnpjInput = document.getElementById('cnpj');
+    const emailInput = document.getElementById('contact_email');
+    const addressInput = document.getElementById('address');
+
+    function updatePreview() {
+        const previewCard = document.getElementById('previewCard');
+        const name = nameInput.value.trim();
+
+        if (name) {
+            previewCard.style.display = 'block';
+
+            // Avatar
+            document.getElementById('previewAvatar').textContent = name[0].toUpperCase();
+
+            // Nome
+            document.getElementById('previewName').textContent = name;
+
+            // CNPJ
+            const cnpjElement = document.getElementById('previewCNPJ');
+            if (cnpjInput.value) {
+                cnpjElement.style.display = 'block';
+                cnpjElement.querySelector('span').textContent = cnpjInput.value;
+            } else {
+                cnpjElement.style.display = 'none';
+            }
+
+            // Email
+            const emailElement = document.getElementById('previewEmail');
+            if (emailInput.value) {
+                emailElement.style.display = 'block';
+                emailElement.querySelector('span').textContent = emailInput.value;
+            } else {
+                emailElement.style.display = 'none';
+            }
+
+            // Endereço
+            const addressElement = document.getElementById('previewAddress');
+            if (addressInput.value) {
+                addressElement.style.display = 'block';
+                const shortAddress = addressInput.value.length > 50 ?
+                    addressInput.value.substring(0, 50) + '...' :
+                    addressInput.value;
+                addressElement.querySelector('span').textContent = shortAddress;
+            } else {
+                addressElement.style.display = 'none';
+            }
+        } else {
+            previewCard.style.display = 'none';
+        }
+    }
+
+    nameInput.addEventListener('input', updatePreview);
+    cnpjInput.addEventListener('input', updatePreview);
+    emailInput.addEventListener('input', updatePreview);
+    addressInput.addEventListener('input', updatePreview);
+});
+{% endif %}
+
+// Função para limpar formulário
+function resetForm() {
+    if (confirm('Tem certeza que deseja limpar todos os campos?')) {
+        document.getElementById('company-form').reset();
+        document.querySelectorAll('.is-valid, .is-invalid').forEach(el => {
+            el.classList.remove('is-valid', 'is-invalid');
+        });
+        {% if not company %}
+        document.getElementById('previewCard').style.display = 'none';
+        {% endif %}
+        document.getElementById('name').focus();
+    }
+}
+
+// Auto-foco no campo nome
+document.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('name').focus();
+
+    // Inicializar tooltips
+    const tooltips = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+    tooltips.forEach(tooltip => {
+        new bootstrap.Tooltip(tooltip);
+    });
+});
+
+// Validação em tempo real nos campos
+document.querySelectorAll('input').forEach(input => {
+    input.addEventListener('blur', function() {
+        if (this.hasAttribute('required') && !this.value.trim()) {
+            this.classList.add('is-invalid');
+        } else if (this.value.trim()) {
+            this.classList.remove('is-invalid');
+            this.classList.add('is-valid');
+        }
+    });
+});
+</script>
+
+<style>
+.form-text {
+    color: #6c757d;
+    font-size: 0.875em;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.avatar-lg {
+    width: 60px;
+    height: 60px;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.btn-outline-primary:hover,
+.btn-outline-info:hover {
+    transform: translateY(-1px);
+    transition: transform 0.2s ease;
+}
+
+.is-valid {
+    border-color: #198754;
+}
+
+.is-invalid {
+    border-color: #dc3545;
+}
+
+.alert {
+    border-radius: 10px;
+}
+
+@media (max-width: 768px) {
+    .d-md-flex {
+        flex-direction: column;
+    }
+
+    .d-md-flex .btn {
+        margin-bottom: 0.5rem;
+    }
+}
+</style>
+
+{% endblock %}

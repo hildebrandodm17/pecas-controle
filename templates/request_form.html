@@ -1,0 +1,140 @@
+<!-- templates/request_form.html -->
+{% extends "base.html" %}
+
+{% block title %}Nova Solicitação{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Nova Solicitação de Peças</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('my_requests') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-10">
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" id="request-form">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="location_id" class="form-label">Local de Destino *</label>
+                                <select class="form-select" id="location_id" name="location_id" required>
+                                    <option value="">Selecione o local</option>
+                                    {% for location in locations %}
+                                    <option value="{{ location.id }}">{{ location.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="equipment_id" class="form-label">Equipamento (Opcional)</label>
+                                <select class="form-select" id="equipment_id" name="equipment_id">
+                                    <option value="">Selecione o equipamento</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Observações</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3"
+                                  placeholder="Descreva o motivo da solicitação ou informações adicionais"></textarea>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5>Peças Solicitadas</h5>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="addPartRow()">
+                            <i class="bi bi-plus"></i> Adicionar Peça
+                        </button>
+                    </div>
+
+                    <div id="parts-container">
+                        <div class="row part-row mb-2">
+                            <div class="col-md-7">
+                                <select class="form-select" name="part_ids" required>
+                                    <option value="">Selecione a peça</option>
+                                    {% for part in parts %}
+                                    <option value="{{ part.id }}">{{ part.name }} - {{ part.part_number or 'S/N' }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="number" class="form-control" name="quantities" min="1" placeholder="Qtd" required>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePartRow(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-send"></i> Enviar Solicitação
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Carregar equipamentos quando local for selecionado
+    document.getElementById('location_id').addEventListener('change', function() {
+        const locationId = this.value;
+        const equipmentSelect = document.getElementById('equipment_id');
+
+        equipmentSelect.innerHTML = '<option value="">Carregando...</option>';
+
+        if (locationId) {
+            fetch(`/api/equipments/${locationId}`)
+                .then(response => response.json())
+                .then(data => {
+                    equipmentSelect.innerHTML = '<option value="">Selecione o equipamento</option>';
+                    data.forEach(equipment => {
+                        equipmentSelect.innerHTML += `<option value="${equipment.id}">${equipment.name}</option>`;
+                    });
+                })
+                .catch(error => {
+                    equipmentSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+                });
+        } else {
+            equipmentSelect.innerHTML = '<option value="">Selecione o equipamento</option>';
+        }
+    });
+
+    function addPartRow() {
+        const container = document.getElementById('parts-container');
+        const firstRow = container.querySelector('.part-row');
+        const newRow = firstRow.cloneNode(true);
+
+        // Limpar valores
+        newRow.querySelectorAll('select, input').forEach(el => el.value = '');
+
+        container.appendChild(newRow);
+    }
+
+    function removePartRow(button) {
+        const container = document.getElementById('parts-container');
+        const rows = container.querySelectorAll('.part-row');
+
+        if (rows.length > 1) {
+            button.closest('.part-row').remove();
+        } else {
+            alert('Pelo menos uma peça deve ser solicitada');
+        }
+    }
+</script>
+{% endblock %}
