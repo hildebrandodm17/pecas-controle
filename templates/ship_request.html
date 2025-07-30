@@ -1,4 +1,4 @@
-<!-- ship_request.html - Template corrigido para envio de peças -->
+<!-- ship_request.html - Template COMPLETAMENTE CORRIGIDO -->
 {% extends "base.html" %}
 
 {% block title %}Enviar Peças - Solicitação #{{ request.id }}{% endblock %}
@@ -33,6 +33,149 @@
         background-color: #f8f9fa;
         border-left: 4px solid #007bff;
     }
+
+    /* ===== SISTEMA DE SELEÇÃO DE INSTÂNCIAS ===== */
+    .instance-item {
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 12px;
+        margin-bottom: 10px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        background: white;
+        position: relative;
+    }
+
+    .instance-item:hover {
+        border-color: #007bff;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .instance-item.selected {
+        border-color: #28a745;
+        background-color: #f8fff9;
+        box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
+    }
+
+    .instance-item.scanned {
+        border-color: #ffc107;
+        background-color: #fffdf0;
+        animation: pulse-yellow 1s ease-in-out;
+    }
+
+    .instance-item.scanned.selected {
+        border-color: #28a745;
+        background-color: #f8fff9;
+        animation: pulse-green 1s ease-in-out;
+    }
+
+    @keyframes pulse-yellow {
+        0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+    }
+
+    @keyframes pulse-green {
+        0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+    }
+
+    /* ===== SCANNER QR CODE ===== */
+    .qr-scanner-section {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    .scanner-container {
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+        padding: 15px;
+        margin-top: 15px;
+    }
+
+    #qr-reader {
+        border-radius: 10px;
+        overflow: hidden;
+        max-width: 300px;
+        margin: 0 auto;
+    }
+
+    .scanner-status {
+        padding: 10px;
+        border-radius: 8px;
+        margin-bottom: 15px;
+        text-align: center;
+        font-weight: bold;
+        background: rgba(255,255,255,0.2);
+    }
+
+    .selection-summary {
+        position: sticky;
+        top: 20px;
+        z-index: 100;
+        background: #28a745;
+        color: white;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+
+    .scanned-items-list {
+        max-height: 200px;
+        overflow-y: auto;
+        background: rgba(255,255,255,0.1);
+        border-radius: 8px;
+        padding: 10px;
+    }
+
+    .scanned-item {
+        background: rgba(255,255,255,0.2);
+        border-radius: 5px;
+        padding: 8px;
+        margin-bottom: 5px;
+        font-size: 0.9em;
+    }
+
+    .bulk-actions {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        border: 1px solid #e9ecef;
+    }
+
+    .scanned-shipping-item {
+        transition: all 0.3s ease;
+        border: 1px solid #28a745 !important;
+        background: #f8fff9 !important;
+    }
+
+    .scanned-shipping-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    /* ===== CONTAINERS DE ITEMS ESCANEADOS ===== */
+    .scanned-items-container {
+        min-height: 60px;
+        border: 2px dashed #28a745;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 10px;
+        background: #f8fff9;
+    }
+
+    .empty-message {
+        text-align: center;
+        color: #6c757d;
+        font-style: italic;
+    }
 </style>
 {% endblock %}
 
@@ -43,14 +186,124 @@
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
                 <div>
-                    <h2><i class="fas fa-shipping-fast"></i> Enviar Peças</h2>
+                    <h2><i class="bi bi-truck"></i> Enviar Peças</h2>
                     <p class="text-muted mb-0">Solicitação #{{ request.id }} - {{ request.requester.username }}</p>
                 </div>
                 <div>
+                    <button type="button" class="btn btn-warning mr-2" onclick="toggleQRScanner()">
+                        <i class="bi bi-qr-code"></i> <span id="scannerToggleText">Ativar Scanner</span>
+                    </button>
                     <a href="{{ url_for('pending_requests') }}" class="btn btn-secondary">
-                        <i class="fas fa-arrow-left"></i> Voltar
+                        <i class="bi bi-arrow-left"></i> Voltar
                     </a>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scanner QR Code -->
+    <div id="qrScannerSection" class="qr-scanner-section" style="display: none;">
+        <div class="row">
+            <div class="col-md-6">
+                <h5><i class="bi bi-camera"></i> Scanner QR Code - Câmera</h5>
+                <div id="scannerStatus" class="scanner-status">
+                    <i class="bi bi-camera"></i> Clique em "Iniciar Scanner" para começar
+                </div>
+                <div class="scanner-container">
+                    <div id="qr-reader"></div>
+                    <div class="text-center mt-3">
+                        <button type="button" class="btn btn-light btn-sm mr-2" onclick="startQRScanner()">
+                            <i class="bi bi-play"></i> Iniciar
+                        </button>
+                        <button type="button" class="btn btn-outline-light btn-sm" onclick="stopQRScanner()">
+                            <i class="bi bi-stop"></i> Parar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <h5><i class="bi bi-list"></i> Itens Escaneados</h5>
+                <div class="scanned-items-list" id="scannedItemsList">
+                    <div class="text-center text-light">
+                        <i class="bi bi-qr-code fa-2x mb-2"></i>
+                        <p>Nenhum item escaneado ainda</p>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="button" class="btn btn-outline-light btn-sm" onclick="clearScannedItems()">
+                        <i class="bi bi-trash"></i> Limpar Lista
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leitura Manual de QR Code -->
+    <div class="card mb-4" style="border: 2px dashed #ffc107; background: #fffdf0;">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-2 text-center">
+                    <i class="bi bi-qr-code fa-3x text-warning"></i>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="mb-2">
+                        <i class="bi bi-keyboard"></i> Leitura Manual de QR Code
+                    </h6>
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text bg-warning text-dark">
+                                <i class="bi bi-qr-code"></i>
+                            </span>
+                        </div>
+                        <input type="text"
+                               class="form-control"
+                               id="manualQRInput"
+                               placeholder="Digite ou escaneie o código da instância aqui..."
+                               onkeypress="handleManualQRInput(event)">
+                        <div class="input-group-append">
+                            <button type="button" class="btn btn-warning text-dark" onclick="processManualQR()">
+                                <i class="bi bi-search"></i> Buscar
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted">
+                        <i class="bi bi-info-circle"></i>
+                        Use um leitor de código de barras ou digite manualmente o código da peça
+                    </small>
+                </div>
+                <div class="col-md-4">
+                    <div class="text-center">
+                        <div class="btn-group-vertical w-100">
+                            <button type="button" class="btn btn-outline-warning btn-sm" onclick="clearManualInput()">
+                                <i class="bi bi-eraser"></i> Limpar Campo
+                            </button>
+                            <button type="button" class="btn btn-outline-info btn-sm mt-1" onclick="showQRHelp()">
+                                <i class="bi bi-question-circle"></i> Como usar?
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="manualQRResult" class="mt-3" style="display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Resumo da Seleção -->
+    <div class="selection-summary">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h6 class="mb-1">
+                    <i class="bi bi-check-square"></i> Itens Selecionados para Envio
+                </h6>
+                <div id="selectionSummaryText">Nenhuma instância selecionada</div>
+            </div>
+            <div class="col-md-4 text-right">
+                <button type="button" class="btn btn-light btn-sm mr-1" onclick="clearAllScannedItems()">
+                    <i class="bi bi-eraser"></i> Limpar Todas
+                </button>
+                <button type="button" class="btn btn-outline-light btn-sm" onclick="showScanHelp()">
+                    <i class="bi bi-question-circle"></i> Ajuda
+                </button>
             </div>
         </div>
     </div>
@@ -60,7 +313,7 @@
         <div class="col-md-6">
             <div class="card summary-card">
                 <div class="card-body">
-                    <h6><i class="fas fa-info-circle"></i> Detalhes da Solicitação</h6>
+                    <h6><i class="bi bi-info-circle"></i> Detalhes da Solicitação</h6>
                     <p><strong>Solicitante:</strong> {{ request.requester.username }}</p>
                     <p><strong>Empresa:</strong> {{ request.company.name }}</p>
                     <p><strong>Local:</strong> {{ request.location.name }}</p>
@@ -77,13 +330,16 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <h6><i class="fas fa-clipboard-list"></i> Resumo dos Itens</h6>
+                    <h6><i class="bi bi-clipboard-list"></i> Status dos Itens</h6>
                     {% for item in request.items %}
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <span>{{ item.part.name }}</span>
-                        <span class="badge badge-info">
-                            {{ item.quantity_requested - item.quantity_sent }} pendente{{ 's' if (item.quantity_requested - item.quantity_sent) != 1 else '' }}
-                        </span>
+                        <div>
+                            <span class="badge badge-warning text-dark mr-1">
+                                {{ item.quantity_requested - item.quantity_sent }} necessário
+                            </span>
+                            <span class="badge badge-success text-white" id="item-selected-count-{{ item.id }}">0 selecionado</span>
+                        </div>
                     </div>
                     {% endfor %}
                 </div>
@@ -97,7 +353,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-boxes"></i> Itens para Envio</h5>
+                        <h5><i class="bi bi-boxes"></i> Seleção de Itens para Envio</h5>
                     </div>
                     <div class="card-body">
                         {% for item in request.items %}
@@ -107,30 +363,75 @@
                             <div class="card-header bg-light">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h6 class="mb-0">
-                                        <i class="fas fa-cog"></i>
+                                        <i class="bi bi-gear"></i>
                                         {{ item.part.name }}
                                         {% if item.part.part_number %}
                                         <small class="text-muted">({{ item.part.part_number }})</small>
                                         {% endif %}
+                                        {% if item.part.base_code %}
+                                        <code class="ml-2 px-2 py-1 bg-primary text-white rounded">{{ item.part.base_code }}</code>
+                                        {% endif %}
                                     </h6>
                                     <div class="d-flex align-items-center">
-                                        <span class="badge badge-warning mr-2">
-                                            Pendente: {{ quantity_needed }}
+                                        <span class="badge badge-warning text-dark mr-2">
+                                            Necessário: {{ quantity_needed }}
+                                        </span>
+                                        <span class="badge badge-primary text-white mr-2" id="available-badge-{{ item.id }}">
+                                            Disponível: --
                                         </span>
                                         <button type="button"
                                                 class="btn btn-sm btn-outline-primary"
                                                 onclick="loadPartInstances({{ item.part.id }}, {{ item.id }}, {{ quantity_needed }})">
-                                            <i class="fas fa-sync-alt"></i> Carregar Instâncias
+                                            <i class="bi bi-arrow-clockwise"></i> Carregar
                                         </button>
                                     </div>
                                 </div>
                             </div>
                             <div class="card-body">
-                                <div id="instances-container-{{ item.id }}">
-                                    <div class="text-center text-muted">
-                                        <i class="fas fa-mouse-pointer"></i>
-                                        Clique em "Carregar Instâncias" para ver as peças disponíveis
+                                <!-- Ações em Lote -->
+                                <div class="bulk-actions" id="bulk-actions-{{ item.id }}" style="display: none;">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-8">
+                                            <div class="btn-group btn-group-sm">
+                                                <button type="button" class="btn btn-outline-success"
+                                                        onclick="selectPartInstances({{ item.id }}, {{ quantity_needed }})">
+                                                    <i class="bi bi-check"></i> Selecionar {{ quantity_needed }}
+                                                </button>
+                                                <button type="button" class="btn btn-outline-warning"
+                                                        onclick="selectPartInstances({{ item.id }}, 'all')">
+                                                    <i class="bi bi-check-all"></i> Todas
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary"
+                                                        onclick="clearPartSelection({{ item.id }})">
+                                                    <i class="bi bi-x"></i> Limpar
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4 text-right">
+                                            <span class="badge badge-info" id="selected-count-{{ item.id }}">0 selecionadas</span>
+                                        </div>
                                     </div>
+                                </div>
+
+                                <!-- Container das Instâncias -->
+                                <div id="instances-container-{{ item.id }}">
+                                    <div class="text-center text-muted py-4">
+                                        <i class="bi bi-cursor fa-2x mb-2"></i>
+                                        <p>Clique em "Carregar" para ver as instâncias disponíveis</p>
+                                        <small class="text-muted">Você poderá selecionar clicando nas instâncias ou escaneando QR codes</small>
+                                    </div>
+                                </div>
+
+                                <!-- Container para itens escaneados desta peça -->
+                                <div class="scanned-items-container" id="scanned-items-container-{{ item.id }}">
+                                    <div id="empty-message-{{ item.id }}" class="empty-message">
+                                        <i class="bi bi-qr-code fa-2x mb-2"></i>
+                                        <p>Nenhuma peça escaneada ainda para {{ item.part.name }}</p>
+                                    </div>
+                                    <button type="button" id="clear-btn-{{ item.id }}" class="btn btn-sm btn-outline-warning"
+                                            onclick="clearScannedForItem({{ item.id }})" style="display: none;">
+                                        <i class="bi bi-trash"></i> Limpar Escaneados
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -141,19 +442,24 @@
             </div>
         </div>
 
+        <!-- Container para inputs hidden das instâncias selecionadas -->
+        <div id="hiddenInputsContainer" style="display: none;">
+            <!-- Inputs das instâncias escaneadas serão adicionados aqui via JavaScript -->
+        </div>
+
         <!-- Informações de Envio -->
         <div class="row mt-4">
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5><i class="fas fa-truck"></i> Informações de Envio</h5>
+                        <h5><i class="bi bi-truck"></i> Informações de Envio</h5>
                     </div>
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="shipping_method">
-                                        <i class="fas fa-shipping-fast"></i> Método de Envio *
+                                        <i class="bi bi-truck"></i> Método de Envio *
                                     </label>
                                     <select id="shipping_method" name="shipping_method" class="form-control" required>
                                         <option value="">Selecione o método...</option>
@@ -169,7 +475,7 @@
                             <div class="col-md-6">
                                 <div class="form-group">
                                     <label for="tracking_number">
-                                        <i class="fas fa-barcode"></i> Código de Rastreamento
+                                        <i class="bi bi-upc"></i> Código de Rastreamento
                                     </label>
                                     <input type="text"
                                            id="tracking_number"
@@ -181,7 +487,7 @@
                         </div>
                         <div class="form-group">
                             <label for="notes">
-                                <i class="fas fa-sticky-note"></i> Observações do Envio
+                                <i class="bi bi-sticky"></i> Observações do Envio
                             </label>
                             <textarea id="notes"
                                       name="notes"
@@ -200,20 +506,21 @@
                 <div class="d-flex justify-content-between">
                     <div>
                         <a href="{{ url_for('pending_requests') }}" class="btn btn-secondary">
-                            <i class="fas fa-times"></i> Cancelar
+                            <i class="bi bi-x"></i> Cancelar
                         </a>
-                        <button type="button" class="btn btn-info ml-2" onclick="debugInstances()">
-                            <i class="fas fa-bug"></i> Debug
+                        <button type="button" class="btn btn-info ml-2" onclick="debugSelection()">
+                            <i class="bi bi-bug"></i> Debug
                         </button>
                     </div>
                     <div>
                         <button type="button"
-                                class="btn btn-outline-primary mr-2"
-                                onclick="loadAllRequestInstances({{ request.id }})">
-                            <i class="fas fa-sync-alt"></i> Recarregar Todas
+                                class="btn btn-outline-info mr-2"
+                                onclick="showScanHelp()">
+                            <i class="bi bi-question-circle"></i> Como Usar
                         </button>
-                        <button type="submit" class="btn btn-success">
-                            <i class="fas fa-paper-plane"></i> Confirmar Envio
+                        <button type="submit" class="btn btn-success btn-lg">
+                            <i class="bi bi-send"></i> Confirmar Envio
+                            <span class="badge badge-light ml-2" id="totalSelectedBadge">0</span>
                         </button>
                     </div>
                 </div>
@@ -221,54 +528,405 @@
         </div>
     </form>
 </div>
-
-<!-- Modal de Confirmação -->
-<div class="modal fade" id="confirmModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="fas fa-exclamation-triangle text-warning"></i>
-                    Confirmar Envio
-                </h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
-            </div>
-            <div class="modal-body">
-                <p>Você está prestes a enviar as instâncias selecionadas.</p>
-                <p><strong>Esta ação não pode ser desfeita.</strong></p>
-                <div id="confirmation-summary"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                    Cancelar
-                </button>
-                <button type="button" class="btn btn-success" id="final-confirm-btn">
-                    <i class="fas fa-check"></i> Confirmar Envio
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
-<script>
-// ============= JAVASCRIPT INLINE PARA O SISTEMA DE ENVIO =============
+<!-- Biblioteca QR Code -->
+<script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
-// Função para carregar instâncias disponíveis de uma peça
+<script>
+// ============= VARIÁVEIS GLOBAIS (TODAS DECLARADAS) =============
+let qrScanner = null;
+let isScanning = false;
+let scannedItems = [];
+let scannedForShipping = {}; // Peças escaneadas organizadas por item da solicitação
+let requestItemsData = {}; // Dados dos itens da solicitação para validação
+let availableInstances = {}; // ✅ ADICIONADA: Instâncias disponíveis por item da solicitação
+let selectedInstances = {}; // ✅ ADICIONADA: Instâncias selecionadas manualmente por item
+
+// ✅ CORREÇÃO: Carregar dados dos itens da solicitação do template
+{% for item in request.items %}
+{% set quantity_needed = item.quantity_requested - item.quantity_sent %}
+{% if quantity_needed > 0 %}
+requestItemsData[{{ item.id }}] = {
+    partId: {{ item.part.id }},
+    partName: "{{ item.part.name }}",
+    baseCode: "{{ item.part.base_code or '' }}",
+    quantityNeeded: {{ quantity_needed }}
+};
+scannedForShipping[{{ item.id }}] = [];
+selectedInstances[{{ item.id }}] = []; // ✅ INICIALIZAR
+availableInstances[{{ item.id }}] = []; // ✅ INICIALIZAR
+{% endif %}
+{% endfor %}
+
+// ============= FUNÇÕES DO SCANNER QR =============
+function toggleQRScanner() {
+    const section = document.getElementById('qrScannerSection');
+    const toggleText = document.getElementById('scannerToggleText');
+
+    if (section.style.display === 'none') {
+        section.style.display = 'block';
+        toggleText.textContent = 'Ocultar Scanner';
+        section.scrollIntoView({ behavior: 'smooth' });
+    } else {
+        section.style.display = 'none';
+        toggleText.textContent = 'Ativar Scanner';
+        if (isScanning) {
+            stopQRScanner();
+        }
+    }
+}
+
+function startQRScanner() {
+    const statusDiv = document.getElementById('scannerStatus');
+
+    if (isScanning) {
+        showMessage('Scanner já está ativo!', 'warning');
+        return;
+    }
+
+    qrScanner = new Html5QrcodeScanner("qr-reader", {
+        fps: 10,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+    });
+
+    qrScanner.render(onScanSuccess, onScanFailure);
+
+    isScanning = true;
+    statusDiv.innerHTML = '<i class="bi bi-camera"></i> Scanner ativo - Posicione o QR code na câmera';
+    statusDiv.className = 'scanner-status';
+}
+
+function stopQRScanner() {
+    if (qrScanner && isScanning) {
+        qrScanner.clear();
+        qrScanner = null;
+        isScanning = false;
+
+        const statusDiv = document.getElementById('scannerStatus');
+        statusDiv.innerHTML = '<i class="bi bi-camera"></i> Scanner parado';
+        statusDiv.className = 'scanner-status';
+    }
+}
+
+function onScanSuccess(decodedText, decodedResult) {
+    console.log(`QR Code escaneado: ${decodedText}`);
+
+    try {
+        // Tentar decodificar o JSON do QR code
+        const qrData = JSON.parse(decodedText);
+
+        if (qrData.unique_code) {
+            processScannedQR(qrData);
+        } else {
+            showMessage('QR Code não contém um código válido de instância', 'error');
+        }
+    } catch (error) {
+        // Se não for JSON, tratar como código direto
+        processScannedCode(decodedText);
+    }
+}
+
+function onScanFailure(error) {
+    // Ignorar erros de scan normais
+}
+
+function processScannedQR(qrData) {
+    const uniqueCode = qrData.unique_code;
+    const partId = qrData.part_id;
+    const partName = qrData.part_name;
+
+    console.log(`Processando QR: ${uniqueCode}, Part ID: ${partId}`);
+
+    // Encontrar qual item da solicitação corresponde a esta peça
+    let targetItemId = null;
+    let targetItemData = null;
+
+    for (const [itemId, itemData] of Object.entries(requestItemsData)) {
+        if (itemData.partId === partId) {
+            targetItemId = itemId;
+            targetItemData = itemData;
+            break;
+        }
+    }
+
+    if (!targetItemId) {
+        showMessage(`❌ A peça "${partName}" (${uniqueCode}) não está na lista de itens solicitados!`, 'error');
+        return;
+    }
+
+    // Verificar se já foi escaneada
+    const alreadyScanned = scannedForShipping[targetItemId].find(item => item.uniqueCode === uniqueCode);
+    if (alreadyScanned) {
+        showMessage(`⚠️ Peça ${uniqueCode} já foi escaneada!`, 'warning');
+        return;
+    }
+
+    // Verificar se não ultrapassou a quantidade necessária
+    if (scannedForShipping[targetItemId].length >= targetItemData.quantityNeeded) {
+        showMessage(`⚠️ Quantidade necessária de "${targetItemData.partName}" já foi atingida! (${targetItemData.quantityNeeded})`, 'warning');
+        return;
+    }
+
+    // Buscar detalhes da instância via API
+    fetch(`/api/parts/${partId}/instances?company_id={{ current_user.company_id if current_user.role != 'master' else request.company_id }}&unique_code=${uniqueCode}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const instance = data.instances.find(inst => inst.unique_code === uniqueCode);
+                if (instance && instance.status === 'em_estoque') {
+                    addScannedItemToShipping(targetItemId, {
+                        id: instance.id,
+                        uniqueCode: uniqueCode,
+                        partName: partName,
+                        createdAt: instance.created_at,
+                        scannedAt: new Date().toLocaleTimeString()
+                    });
+
+                    addToScannedList(uniqueCode, partName);
+                    showMessage(`✅ ${uniqueCode} escaneado e adicionado para envio!`, 'success');
+                } else {
+                    showMessage(`❌ ${uniqueCode} não está disponível em estoque`, 'error');
+                }
+            } else {
+                showMessage(`❌ Erro ao verificar peça: ${data.message}`, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao verificar instância:', error);
+            showMessage(`❌ Erro ao verificar peça escaneada`, 'error');
+        });
+}
+
+// ✅ CORREÇÃO: Função processScannedCode usando busca direta por instância
+function processScannedCode(code) {
+    console.log(`Processando código escaneado: ${code}`);
+
+    // Buscar a instância diretamente por código único
+    const companyId = {{ current_user.company_id if current_user.role != 'master' else request.company_id }};
+
+    // Procurar em todos os itens da solicitação
+    let foundInstance = null;
+    let targetItemId = null;
+    let targetItemData = null;
+
+    // Buscar em todas as instâncias disponíveis carregadas
+    for (const [itemId, instances] of Object.entries(availableInstances)) {
+        const instance = instances.find(inst => inst.unique_code === code);
+        if (instance) {
+            foundInstance = instance;
+            targetItemId = itemId;
+            targetItemData = requestItemsData[itemId];
+            break;
+        }
+    }
+
+    if (!foundInstance) {
+        // Se não encontrou nas instâncias carregadas, buscar via API
+        findInstanceByCode(code);
+        return;
+    }
+
+    // Verificar se já foi escaneada
+    const alreadyScanned = scannedForShipping[targetItemId].find(item => item.uniqueCode === code);
+    if (alreadyScanned) {
+        showMessage(`⚠️ Peça ${code} já foi escaneada!`, 'warning');
+        return;
+    }
+
+    // Verificar se não ultrapassou a quantidade necessária
+    if (scannedForShipping[targetItemId].length >= targetItemData.quantityNeeded) {
+        showMessage(`⚠️ Quantidade necessária de "${targetItemData.partName}" já foi atingida! (${targetItemData.quantityNeeded})`, 'warning');
+        return;
+    }
+
+    // Adicionar à lista de envio
+    addScannedItemToShipping(targetItemId, {
+        id: foundInstance.id,
+        uniqueCode: code,
+        partName: foundInstance.part_name || targetItemData.partName,
+        createdAt: foundInstance.created_at,
+        scannedAt: new Date().toLocaleTimeString()
+    });
+
+    addToScannedList(code, foundInstance.part_name || targetItemData.partName);
+    showMessage(`✅ ${code} escaneado e adicionado para envio!`, 'success');
+}
+
+// ✅ NOVA: Função para buscar instância por código via API
+function findInstanceByCode(code) {
+    // Buscar em todas as peças da solicitação
+    const promises = Object.values(requestItemsData).map(itemData => {
+        return fetch(`/api/parts/${itemData.partId}/instances?company_id={{ current_user.company_id if current_user.role != 'master' else request.company_id }}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const instance = data.instances.find(inst => inst.unique_code === code);
+                    if (instance) {
+                        return {
+                            instance: instance,
+                            itemData: itemData
+                        };
+                    }
+                }
+                return null;
+            })
+            .catch(error => {
+                console.error('Erro ao buscar instância:', error);
+                return null;
+            });
+    });
+
+    Promise.all(promises).then(results => {
+        const found = results.find(result => result !== null);
+
+        if (found) {
+            const { instance, itemData } = found;
+
+            // Encontrar o itemId correspondente
+            let targetItemId = null;
+            for (const [itemId, data] of Object.entries(requestItemsData)) {
+                if (data.partId === itemData.partId) {
+                    targetItemId = itemId;
+                    break;
+                }
+            }
+
+            if (targetItemId) {
+                // Verificar se já foi escaneada
+                const alreadyScanned = scannedForShipping[targetItemId].find(item => item.uniqueCode === code);
+                if (alreadyScanned) {
+                    showMessage(`⚠️ Peça ${code} já foi escaneada!`, 'warning');
+                    return;
+                }
+
+                // Verificar quantidade
+                if (scannedForShipping[targetItemId].length >= itemData.quantityNeeded) {
+                    showMessage(`⚠️ Quantidade necessária de "${itemData.partName}" já foi atingida! (${itemData.quantityNeeded})`, 'warning');
+                    return;
+                }
+
+                // Adicionar à lista de envio
+                addScannedItemToShipping(targetItemId, {
+                    id: instance.id,
+                    uniqueCode: code,
+                    partName: instance.part_name || itemData.partName,
+                    createdAt: instance.created_at,
+                    scannedAt: new Date().toLocaleTimeString()
+                });
+
+                addToScannedList(code, instance.part_name || itemData.partName);
+                showMessage(`✅ ${code} escaneado e adicionado para envio!`, 'success');
+            }
+        } else {
+            showMessage(`❌ Código ${code} não encontrado ou não disponível em estoque`, 'error');
+        }
+    });
+}
+
+function addToScannedList(code, partName) {
+    const listContainer = document.getElementById('scannedItemsList');
+
+    // Verificar se já não foi escaneado
+    if (scannedItems.includes(code)) {
+        return;
+    }
+
+    scannedItems.push(code);
+
+    // Se é o primeiro item, limpar mensagem padrão
+    if (scannedItems.length === 1) {
+        listContainer.innerHTML = '';
+    }
+
+    const scannedItem = document.createElement('div');
+    scannedItem.className = 'scanned-item';
+    scannedItem.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <strong>${code}</strong>
+                <br><small>${partName}</small>
+            </div>
+            <div>
+                <small class="text-light">${new Date().toLocaleTimeString()}</small>
+                <button type="button" class="btn btn-sm btn-outline-light ml-2" onclick="removeScannedItem('${code}')">
+                    <i class="bi bi-x"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    listContainer.appendChild(scannedItem);
+}
+
+function removeScannedItem(code) {
+    scannedItems = scannedItems.filter(item => item !== code);
+
+    // Remover seleção visual se ainda estiver selecionada
+    const instanceItem = document.querySelector(`[data-unique-code="${code}"]`);
+    if (instanceItem) {
+        instanceItem.classList.remove('scanned');
+    }
+
+    // Recriar lista
+    const listContainer = document.getElementById('scannedItemsList');
+    listContainer.innerHTML = '';
+
+    if (scannedItems.length === 0) {
+        listContainer.innerHTML = `
+            <div class="text-center text-light">
+                <i class="bi bi-qr-code fa-2x mb-2"></i>
+                <p>Nenhum item escaneado ainda</p>
+            </div>
+        `;
+    } else {
+        scannedItems.forEach(item => {
+            // Recriar itens (versão simplificada)
+            const scannedItem = document.createElement('div');
+            scannedItem.className = 'scanned-item';
+            scannedItem.innerHTML = `
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>${item}</strong>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="removeScannedItem('${item}')">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            `;
+            listContainer.appendChild(scannedItem);
+        });
+    }
+}
+
+function clearScannedItems() {
+    scannedItems = [];
+    const listContainer = document.getElementById('scannedItemsList');
+    listContainer.innerHTML = `
+        <div class="text-center text-light">
+            <i class="bi bi-qr-code fa-2x mb-2"></i>
+            <p>Nenhum item escaneado ainda</p>
+        </div>
+    `;
+
+    // Remover marcação visual de escaneado
+    document.querySelectorAll('.instance-item.scanned').forEach(item => {
+        item.classList.remove('scanned');
+    });
+}
+
+// ============= FUNÇÕES DE CARREGAMENTO =============
 function loadPartInstances(partId, requestItemId, maxQuantity) {
     console.log(`Carregando instâncias para peça ${partId}, item ${requestItemId}, max: ${maxQuantity}`);
 
-    // Mostrar loading
     const container = document.getElementById(`instances-container-${requestItemId}`);
     if (container) {
-        container.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></div>';
+        container.innerHTML = '<div class="loading-spinner"><i class="bi bi-arrow-clockwise spin fa-2x text-primary"></i></div>';
     }
 
-    // Fazer requisição para a API
-    fetch(`/api/parts/${partId}/instances?company_id={{ current_user.company_id if current_user.role != 'master' else request.company_id }}`)
+    const companyId = {{ current_user.company_id if current_user.role != 'master' else request.company_id }};
+
+    fetch(`/api/parts/${partId}/instances?company_id=${companyId}`)
         .then(response => {
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -276,8 +934,30 @@ function loadPartInstances(partId, requestItemId, maxQuantity) {
             return response.json();
         })
         .then(data => {
+            console.log('Resposta da API de instâncias:', data);
+
             if (data.success) {
+                // ✅ CORREÇÃO: Garantir que availableInstances está inicializada
+                if (!availableInstances) {
+                    availableInstances = {};
+                }
+
+                // Armazenar instâncias para uso do scanner
+                availableInstances[requestItemId] = data.instances;
+
                 displayPartInstances(data.instances, requestItemId, maxQuantity);
+
+                // Mostrar ações em lote
+                const bulkActions = document.getElementById(`bulk-actions-${requestItemId}`);
+                if (bulkActions) {
+                    bulkActions.style.display = 'block';
+                }
+
+                // Atualizar badge disponível
+                const badge = document.getElementById(`available-badge-${requestItemId}`);
+                if (badge) {
+                    badge.textContent = `Disponível: ${data.instances.length}`;
+                }
             } else {
                 throw new Error(data.message || 'Erro desconhecido');
             }
@@ -287,11 +967,11 @@ function loadPartInstances(partId, requestItemId, maxQuantity) {
             if (container) {
                 container.innerHTML = `
                     <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle"></i>
+                        <i class="bi bi-exclamation-triangle"></i>
                         <strong>Erro ao carregar instâncias:</strong> ${error.message}
-                        <br><small>Verifique se existem peças em estoque e se as instâncias foram criadas corretamente.</small>
+                        <br><small>Verifique se existem peças em estoque.</small>
                         <br><button type="button" class="btn btn-sm btn-outline-warning mt-2" onclick="loadPartInstances(${partId}, ${requestItemId}, ${maxQuantity})">
-                            <i class="fas fa-redo"></i> Tentar Novamente
+                            <i class="bi bi-arrow-clockwise"></i> Tentar Novamente
                         </button>
                     </div>
                 `;
@@ -299,7 +979,6 @@ function loadPartInstances(partId, requestItemId, maxQuantity) {
         });
 }
 
-// Função para exibir as instâncias disponíveis
 function displayPartInstances(instances, requestItemId, maxQuantity) {
     const container = document.getElementById(`instances-container-${requestItemId}`);
 
@@ -311,7 +990,7 @@ function displayPartInstances(instances, requestItemId, maxQuantity) {
     if (instances.length === 0) {
         container.innerHTML = `
             <div class="alert alert-info">
-                <i class="fas fa-info-circle"></i>
+                <i class="bi bi-info-circle"></i>
                 <strong>Nenhuma instância disponível em estoque.</strong>
                 <br><small>Verifique se há peças cadastradas no estoque desta empresa.</small>
             </div>
@@ -319,136 +998,367 @@ function displayPartInstances(instances, requestItemId, maxQuantity) {
         return;
     }
 
-    // Limitar instâncias à quantidade máxima necessária
-    const limitedInstances = instances.slice(0, maxQuantity);
-
     let html = `
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-boxes"></i>
-                    Instâncias Disponíveis (${limitedInstances.length} de ${instances.length})
-                </h6>
-                <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-outline-primary" onclick="selectAllInstances(${requestItemId}, true)">
-                        <i class="fas fa-check-square"></i> Todas
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary" onclick="selectAllInstances(${requestItemId}, false)">
-                        <i class="fas fa-square"></i> Nenhuma
-                    </button>
-                </div>
+        <div class="row">
+            <div class="col-12">
+                <p class="text-muted mb-3">
+                    <i class="bi bi-info-circle"></i>
+                    <strong>${instances.length}</strong> instâncias disponíveis.
+                    <strong>Necessário: ${maxQuantity}</strong> unidades.
+                    <br><small>Clique nas instâncias ou escaneie QR codes para selecionar manualmente.</small>
+                </p>
             </div>
-            <div class="card-body">
-                <div class="row">
+        </div>
+        <div class="row">
     `;
 
-    limitedInstances.forEach((instance, index) => {
+    // MOSTRAR TODAS as instâncias, não limitar
+    instances.forEach((instance, index) => {
         const warrantyInfo = instance.warranty_expires ?
-            `<small class="text-muted"><br><i class="fas fa-shield-alt"></i> Garantia: ${instance.warranty_expires}</small>` : '';
+            `<br><small class="text-muted"><i class="bi bi-shield"></i> Garantia: ${instance.warranty_expires}</small>` : '';
 
         html += `
             <div class="col-md-6 col-lg-4 mb-3">
-                <div class="custom-control custom-checkbox">
+                <div class="instance-item"
+                     data-instance-id="${instance.id}"
+                     data-request-item-id="${requestItemId}"
+                     data-unique-code="${instance.unique_code}"
+                     onclick="toggleInstanceSelection(${requestItemId}, ${instance.id}, '${instance.unique_code}')">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="flex-grow-1">
+                            <strong class="text-primary d-block">${instance.unique_code}</strong>
+                            <small class="text-muted">
+                                <i class="bi bi-calendar"></i> ${instance.created_at}
+                                ${warrantyInfo}
+                            </small>
+                        </div>
+                        <div class="text-right">
+                            <i class="bi bi-check-circle text-success" style="display: none;"></i>
+                            <i class="bi bi-qr-code text-warning" style="display: none;"></i>
+                        </div>
+                    </div>
+                    <!-- Input hidden para submissão -->
                     <input type="checkbox"
-                           class="custom-control-input instance-checkbox"
-                           id="instance_${requestItemId}_${instance.id}"
                            name="instances_${requestItemId}"
                            value="${instance.id}"
-                           onchange="updateSelectedCount(${requestItemId})">
-                    <label class="custom-control-label" for="instance_${requestItemId}_${instance.id}">
-                        <strong class="text-primary">${instance.unique_code}</strong>
-                        <small class="text-muted d-block">
-                            <i class="fas fa-calendar"></i> ${instance.created_at}
-                        </small>
-                        ${warrantyInfo}
-                    </label>
+                           style="display: none;"
+                           class="instance-checkbox-${requestItemId}">
                 </div>
             </div>
         `;
     });
 
-    html += `
-                </div>
-                <div class="mt-3 text-center">
-                    <span class="badge badge-info" id="selected-count-${requestItemId}">0 selecionadas</span>
-                    <span class="text-muted"> / máximo ${maxQuantity}</span>
-                </div>
-            </div>
-        </div>
-    `;
-
+    html += '</div>';
     container.innerHTML = html;
 }
 
-// Função para selecionar/desmarcar todas as instâncias
-function selectAllInstances(requestItemId, selectAll) {
-    const checkboxes = document.querySelectorAll(`input[name="instances_${requestItemId}"]`);
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = selectAll;
-    });
-    updateSelectedCount(requestItemId);
+// ============= FUNÇÕES DE SELEÇÃO =============
+function toggleInstanceSelection(requestItemId, instanceId, uniqueCode) {
+    const instanceElement = document.querySelector(`[data-instance-id="${instanceId}"]`);
+    const checkbox = instanceElement.querySelector('input[type="checkbox"]');
+    const checkIcon = instanceElement.querySelector('.bi-check-circle');
+
+    if (!selectedInstances[requestItemId]) {
+        selectedInstances[requestItemId] = [];
+    }
+
+    const isSelected = selectedInstances[requestItemId].includes(instanceId);
+
+    if (isSelected) {
+        // Desselecionar
+        selectedInstances[requestItemId] = selectedInstances[requestItemId].filter(id => id !== instanceId);
+        instanceElement.classList.remove('selected');
+        checkbox.checked = false;
+        checkIcon.style.display = 'none';
+    } else {
+        // Selecionar
+        selectedInstances[requestItemId].push(instanceId);
+        instanceElement.classList.add('selected');
+        checkbox.checked = true;
+        checkIcon.style.display = 'block';
+    }
+
+    updateSelectionCounters();
 }
 
-// Função para atualizar contador de selecionadas
-function updateSelectedCount(requestItemId) {
-    const checkboxes = document.querySelectorAll(`input[name="instances_${requestItemId}"]:checked`);
-    const counter = document.getElementById(`selected-count-${requestItemId}`);
+function selectInstanceById(requestItemId, instanceId, uniqueCode, fromScan = false) {
+    const instanceElement = document.querySelector(`[data-instance-id="${instanceId}"]`);
 
-    if (counter) {
-        const count = checkboxes.length;
-        counter.textContent = `${count} selecionada${count !== 1 ? 's' : ''}`;
-        counter.className = count > 0 ? 'badge badge-success' : 'badge badge-info';
+    if (!instanceElement) {
+        console.error(`Instância ${instanceId} não encontrada no DOM`);
+        return;
+    }
+
+    const checkbox = instanceElement.querySelector('input[type="checkbox"]');
+    const checkIcon = instanceElement.querySelector('.bi-check-circle');
+    const qrIcon = instanceElement.querySelector('.bi-qr-code');
+
+    if (!selectedInstances[requestItemId]) {
+        selectedInstances[requestItemId] = [];
+    }
+
+    // Se não estiver selecionada, selecionar
+    if (!selectedInstances[requestItemId].includes(instanceId)) {
+        selectedInstances[requestItemId].push(instanceId);
+        instanceElement.classList.add('selected');
+        checkbox.checked = true;
+        checkIcon.style.display = 'block';
+
+        if (fromScan) {
+            instanceElement.classList.add('scanned');
+            qrIcon.style.display = 'block';
+        }
+
+        updateSelectionCounters();
     }
 }
 
-// Função para carregar todas as instâncias da solicitação
-function loadAllRequestInstances(requestId) {
-    console.log(`Carregando todas as instâncias para solicitação ${requestId}`);
+function selectPartInstances(requestItemId, quantity) {
+    const instances = availableInstances[requestItemId] || [];
+    let toSelect = quantity === 'all' ? instances.length : Math.min(quantity, instances.length);
 
-    // Mostrar loading em todos os containers
-    const containers = document.querySelectorAll('[id^="instances-container-"]');
-    containers.forEach(container => {
-        container.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></div>';
-    });
+    // Limpar seleção atual desta parte
+    clearPartSelection(requestItemId);
 
-    fetch(`/api/requests/${requestId}/available-instances`)
-        .then(response => {
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    // Selecionar as primeiras 'toSelect' instâncias
+    for (let i = 0; i < toSelect; i++) {
+        const instance = instances[i];
+        selectInstanceById(requestItemId, instance.id, instance.unique_code);
+    }
+}
+
+function clearPartSelection(requestItemId) {
+    if (selectedInstances[requestItemId]) {
+        selectedInstances[requestItemId].forEach(instanceId => {
+            const instanceElement = document.querySelector(`[data-instance-id="${instanceId}"]`);
+            if (instanceElement) {
+                instanceElement.classList.remove('selected');
+                const checkbox = instanceElement.querySelector('input[type="checkbox"]');
+                const checkIcon = instanceElement.querySelector('.bi-check-circle');
+                checkbox.checked = false;
+                checkIcon.style.display = 'none';
             }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                displayAllRequestInstances(data.available_instances);
-                showSuccessMessage('Instâncias carregadas com sucesso!');
-            } else {
-                throw new Error(data.message || 'Erro desconhecido');
-            }
-        })
-        .catch(error => {
-            console.error('Erro ao carregar instâncias da solicitação:', error);
-            showErrorMessage(`Erro ao carregar instâncias: ${error.message}`);
         });
+        selectedInstances[requestItemId] = [];
+    }
+
+    updateSelectionCounters();
 }
 
-// Função para exibir todas as instâncias da solicitação
-function displayAllRequestInstances(availableInstances) {
-    Object.keys(availableInstances).forEach(itemId => {
-        const itemData = availableInstances[itemId];
-        displayPartInstances(itemData.instances, itemId, itemData.quantity_needed);
+function updateSelectionCounters() {
+    let totalSelected = 0;
+    let summaryText = [];
+
+    Object.keys(selectedInstances).forEach(requestItemId => {
+        const count = selectedInstances[requestItemId] ? selectedInstances[requestItemId].length : 0;
+        totalSelected += count;
+
+        // Atualizar contador individual
+        const counter = document.getElementById(`selected-count-${requestItemId}`);
+        const itemCounter = document.getElementById(`item-selected-count-${requestItemId}`);
+
+        if (counter) {
+            counter.textContent = `${count} selecionada${count !== 1 ? 's' : ''}`;
+            counter.className = count > 0 ? 'badge badge-success text-white' : 'badge badge-info text-white';
+        }
+
+        if (itemCounter) {
+            itemCounter.textContent = `${count} selecionado${count !== 1 ? 's' : ''}`;
+            itemCounter.className = count > 0 ? 'badge badge-success text-white' : 'badge badge-secondary text-white';
+        }
+
+        if (count > 0) {
+            // Obter nome da peça
+            const partCard = document.getElementById(`instances-container-${requestItemId}`).closest('.instance-card');
+            const partName = partCard.querySelector('h6').textContent.trim();
+            summaryText.push(`${partName}: ${count}`);
+        }
+    });
+
+    // Atualizar resumo geral
+    const summaryElement = document.getElementById('selectionSummaryText');
+    const totalBadge = document.getElementById('totalSelectedBadge');
+
+    if (totalSelected === 0) {
+        summaryElement.textContent = 'Nenhuma instância selecionada';
+    } else {
+        summaryElement.innerHTML = `<strong>${totalSelected}</strong> instâncias selecionadas<br><small>${summaryText.join(' • ')}</small>`;
+    }
+
+    if (totalBadge) {
+        totalBadge.textContent = totalSelected;
+    }
+
+    // Atualizar campos hidden para submissão
+    updateHiddenInputs();
+}
+
+function updateHiddenInputs() {
+    const container = document.getElementById('hiddenInputsContainer');
+    if (!container) {
+        console.error('Container hiddenInputsContainer não encontrado!');
+        return;
+    }
+
+    container.innerHTML = '';
+
+    // Adicionar inputs das instâncias selecionadas manualmente
+    Object.keys(selectedInstances).forEach(requestItemId => {
+        selectedInstances[requestItemId].forEach(instanceId => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `instances_${requestItemId}`;
+            input.value = instanceId;
+            container.appendChild(input);
+        });
+    });
+
+    // Adicionar inputs das instâncias escaneadas
+    Object.keys(scannedForShipping).forEach(requestItemId => {
+        scannedForShipping[requestItemId].forEach(item => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = `instances_${requestItemId}`;
+            input.value = item.id;
+            container.appendChild(input);
+        });
     });
 }
 
-// Função para validar formulário de envio
+// ============= GERENCIAMENTO DE ITENS ESCANEADOS =============
+function addScannedItemToShipping(itemId, instanceData) {
+    scannedForShipping[itemId].push(instanceData);
+    updateScannedItemDisplay(itemId);
+    updateShippingCounters();
+}
+
+function updateScannedItemDisplay(itemId) {
+    const container = document.getElementById(`scanned-items-container-${itemId}`);
+    const emptyMessage = document.getElementById(`empty-message-${itemId}`);
+    const clearBtn = document.getElementById(`clear-btn-${itemId}`);
+
+    if (!container) return;
+
+    const scannedItems = scannedForShipping[itemId];
+
+    if (scannedItems.length === 0) {
+        if (emptyMessage) emptyMessage.style.display = 'block';
+        if (clearBtn) clearBtn.style.display = 'none';
+        return;
+    }
+
+    if (emptyMessage) emptyMessage.style.display = 'none';
+    if (clearBtn) clearBtn.style.display = 'inline-block';
+
+    // Criar HTML das peças escaneadas
+    let itemsHtml = '';
+    scannedItems.forEach((item, index) => {
+        itemsHtml += `
+            <div class="d-flex justify-content-between align-items-center p-2 mb-2 bg-white border rounded scanned-shipping-item">
+                <div class="flex-grow-1">
+                    <strong class="text-success">${item.uniqueCode}</strong>
+                    <br><small class="text-muted">
+                        <i class="bi bi-clock"></i> Escaneado: ${item.scannedAt}
+                        <br><i class="bi bi-calendar"></i> Criado: ${item.createdAt}
+                    </small>
+                </div>
+                <div class="text-right">
+                    <span class="badge badge-success">Selecionado</span>
+                    <button type="button" class="btn btn-sm btn-outline-danger ml-2"
+                            onclick="removeScannedFromShipping(${itemId}, ${index})"
+                            title="Remover">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    });
+
+    // Substituir conteúdo, mantendo a mensagem vazia e botão
+    container.innerHTML = (emptyMessage ? emptyMessage.outerHTML : '') + itemsHtml + (clearBtn ? clearBtn.outerHTML : '');
+}
+
+function removeScannedFromShipping(itemId, index) {
+    const removedItem = scannedForShipping[itemId][index];
+    scannedForShipping[itemId].splice(index, 1);
+
+    // Remover da lista geral de escaneados também
+    scannedItems = scannedItems.filter(code => code !== removedItem.uniqueCode);
+
+    updateScannedItemDisplay(itemId);
+    updateShippingCounters();
+
+    showMessage(`🗑️ ${removedItem.uniqueCode} removido da seleção`, 'info');
+}
+
+function clearScannedForItem(itemId) {
+    const itemData = requestItemsData[itemId];
+    if (confirm(`Limpar todas as ${scannedForShipping[itemId].length} peças escaneadas de "${itemData.partName}"?`)) {
+        // Remover da lista geral
+        scannedForShipping[itemId].forEach(item => {
+            scannedItems = scannedItems.filter(code => code !== item.uniqueCode);
+        });
+
+        scannedForShipping[itemId] = [];
+        updateScannedItemDisplay(itemId);
+        updateShippingCounters();
+
+        showMessage(`🗑️ Todas as seleções de "${itemData.partName}" foram limpas`, 'info');
+    }
+}
+
+function updateShippingCounters() {
+    let totalScanned = 0;
+    let summaryText = [];
+
+    for (const [itemId, items] of Object.entries(scannedForShipping)) {
+        const count = items.length;
+        totalScanned += count;
+
+        // Atualizar contador do item
+        const itemCounter = document.getElementById(`item-selected-count-${itemId}`);
+
+        if (itemCounter) {
+            itemCounter.textContent = `${count} selecionado${count !== 1 ? 's' : ''}`;
+            itemCounter.className = count > 0 ? 'badge badge-success text-white' : 'badge badge-secondary text-white';
+        }
+
+        if (count > 0) {
+            const itemData = requestItemsData[itemId];
+            summaryText.push(`${itemData.partName}: ${count}/${itemData.quantityNeeded}`);
+        }
+    }
+
+    // Atualizar resumo geral
+    const summaryElement = document.getElementById('selectionSummaryText');
+    const totalBadge = document.getElementById('totalSelectedBadge');
+
+    if (totalScanned === 0) {
+        summaryElement.textContent = 'Nenhuma peça escaneada para envio';
+    } else {
+        summaryElement.innerHTML = `<strong>${totalScanned}</strong> peças escaneadas para envio<br><small>${summaryText.join(' • ')}</small>`;
+    }
+
+    if (totalBadge) {
+        totalBadge.textContent = totalScanned;
+    }
+
+    // Atualizar inputs hidden
+    updateHiddenInputs();
+}
+
+// ============= VALIDAÇÃO E ENVIO =============
 function validateShippingForm() {
     let isValid = true;
     let errorMessages = [];
 
-    // Verificar se pelo menos uma instância foi selecionada
-    const allCheckboxes = document.querySelectorAll('input[name^="instances_"]:checked');
-    if (allCheckboxes.length === 0) {
-        errorMessages.push('Selecione pelo menos uma instância para enviar.');
+    // Verificar se pelo menos uma peça foi escaneada OU selecionada
+    const totalScanned = Object.values(scannedForShipping).reduce((sum, items) => sum + items.length, 0);
+    const totalSelected = Object.values(selectedInstances).reduce((sum, items) => sum + items.length, 0);
+    const totalToShip = totalScanned + totalSelected;
+
+    if (totalToShip === 0) {
+        errorMessages.push('Selecione ou escaneie pelo menos uma peça para enviar.');
         isValid = false;
     }
 
@@ -459,74 +1369,243 @@ function validateShippingForm() {
         isValid = false;
     }
 
-    // Mostrar erros se houver
     if (!isValid) {
-        showErrorMessage(errorMessages.join('<br>'));
+        showMessage(errorMessages.join('<br>'), 'error');
     }
 
     return isValid;
 }
 
-// Função para mostrar mensagens de erro
-function showErrorMessage(message) {
-    const existingAlerts = document.querySelectorAll('.alert-danger.temp-alert');
+// ============= LEITURA MANUAL DE QR CODE =============
+function handleManualQRInput(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        processManualQR();
+    }
+}
+
+function processManualQR() {
+    const input = document.getElementById('manualQRInput');
+    const code = input.value.trim();
+
+    if (!code) {
+        showQRResult('Digite um código para buscar', 'warning');
+        return;
+    }
+
+    console.log(`Processando código manual: ${code}`);
+
+    try {
+        // Tentar como JSON primeiro
+        const qrData = JSON.parse(code);
+        if (qrData.unique_code) {
+            processScannedQR(qrData);
+            input.value = '';
+            showQRResult(`✅ Código processado com sucesso!`, 'success');
+            return;
+        }
+    } catch (error) {
+        // Se não for JSON, tratar como código direto
+    }
+
+    // Processar como código direto
+    processScannedCode(code);
+    input.value = '';
+}
+
+function showQRResult(message, type) {
+    const resultDiv = document.getElementById('manualQRResult');
+    const alertClass = type === 'error' ? 'alert-danger' :
+                     type === 'warning' ? 'alert-warning' :
+                     'alert-success';
+
+    resultDiv.innerHTML = `
+        <div class="alert ${alertClass} alert-dismissible fade show mb-0" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    resultDiv.style.display = 'block';
+
+    // Auto-hide após 3 segundos
+    setTimeout(() => {
+        resultDiv.style.display = 'none';
+    }, 3000);
+}
+
+function clearManualInput() {
+    document.getElementById('manualQRInput').value = '';
+    document.getElementById('manualQRResult').style.display = 'none';
+    document.getElementById('manualQRInput').focus();
+}
+
+function showQRHelp() {
+    const helpText = `
+        <div class="alert alert-info">
+            <h6><i class="bi bi-question-circle"></i> Como usar a leitura de QR Code:</h6>
+            <ol class="mb-2">
+                <li><strong>Leitor de código:</strong> Use um leitor/scanner conectado e escaneie o QR code da peça</li>
+                <li><strong>Digitação manual:</strong> Digite o código da instância (ex: MON17001) e pressione Enter</li>
+                <li><strong>Câmera:</strong> Use o "Scanner QR" acima para ler com a câmera do dispositivo</li>
+            </ol>
+            <small class="text-muted">
+                <i class="bi bi-lightbulb"></i>
+                <strong>Dica:</strong> Com um leitor de código de barras, basta escanear que o código aparecerá automaticamente no campo.
+            </small>
+        </div>
+    `;
+
+    const resultDiv = document.getElementById('manualQRResult');
+    resultDiv.innerHTML = helpText;
+    resultDiv.style.display = 'block';
+}
+
+// ============= FUNÇÕES DE AJUDA =============
+function showScanHelp() {
+    const helpText = `
+        <div class="alert alert-info">
+            <h6><i class="bi bi-question-circle"></i> Como usar o sistema de envio:</h6>
+            <ol class="mb-2">
+                <li><strong>Scanner QR:</strong> Ative o scanner e aponte a câmera para o QR code da peça</li>
+                <li><strong>Leitura manual:</strong> Digite o código no campo "Leitura Manual" e pressione Enter</li>
+                <li><strong>Leitor USB:</strong> Use um leitor de código de barras conectado</li>
+                <li><strong>Seleção manual:</strong> Carregue as instâncias e clique para selecionar</li>
+            </ol>
+            <div class="alert alert-warning mb-2">
+                <strong>⚠️ IMPORTANTE:</strong>
+                <ul class="mb-0">
+                    <li>Peças <strong>escaneadas</strong> têm prioridade sobre seleções manuais</li>
+                    <li>O sistema valida se a peça pertence ao item solicitado</li>
+                    <li>Não é possível enviar peças erradas</li>
+                </ul>
+            </div>
+            <small class="text-muted">
+                <i class="bi bi-lightbulb"></i>
+                <strong>Dica:</strong> Use o campo de leitura manual se o scanner de QR não funcionar bem.
+            </small>
+        </div>
+    `;
+
+    showMessage(helpText, 'info');
+}
+
+function clearAllScannedItems() {
+    if (Object.values(scannedForShipping).some(items => items.length > 0)) {
+        if (confirm('Limpar todas as peças escaneadas de todos os itens?')) {
+            // Limpar todas as listas
+            Object.keys(scannedForShipping).forEach(itemId => {
+                scannedForShipping[itemId] = [];
+                updateScannedItemDisplay(itemId);
+            });
+
+            // Limpar lista geral
+            scannedItems = [];
+            clearScannedItems();
+
+            updateShippingCounters();
+            showMessage('🗑️ Todas as seleções foram limpas', 'info');
+        }
+    } else {
+        showMessage('Nenhuma peça foi escaneada ainda', 'info');
+    }
+}
+
+// ============= UTILITÁRIOS =============
+function showMessage(message, type) {
+    const existingAlerts = document.querySelectorAll('.temp-alert');
     existingAlerts.forEach(alert => alert.remove());
 
+    const alertClass = type === 'error' ? 'alert-danger' :
+                     type === 'warning' ? 'alert-warning' :
+                     type === 'success' ? 'alert-success' :
+                     type === 'info' ? 'alert-info' : 'alert-info';
+
     const alertHtml = `
-        <div class="alert alert-danger alert-dismissible fade show temp-alert" role="alert">
-            <i class="fas fa-exclamation-triangle"></i>
+        <div class="alert ${alertClass} alert-dismissible fade show temp-alert" role="alert">
             ${message}
-            <button type="button" class="close" data-dismiss="alert">
-                <span>&times;</span>
-            </button>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
         </div>
     `;
 
     const container = document.querySelector('.container-fluid');
     container.insertAdjacentHTML('afterbegin', alertHtml);
     window.scrollTo(0, 0);
+
+    // Auto-hide success and info messages
+    if (type === 'success' || type === 'info') {
+        setTimeout(() => {
+            document.querySelectorAll(`.alert-${type === 'success' ? 'success' : 'info'}.temp-alert`).forEach(alert => {
+                alert.style.opacity = '0';
+                setTimeout(() => alert.remove(), 300);
+            });
+        }, type === 'info' ? 4000 : 3000);
+    }
 }
 
-// Função para mostrar mensagens de sucesso
-function showSuccessMessage(message) {
-    const existingAlerts = document.querySelectorAll('.alert-success.temp-alert');
-    existingAlerts.forEach(alert => alert.remove());
+function debugSelection() {
+    console.log('=== DEBUG SELEÇÃO ===');
+    console.log('Dados dos itens da solicitação:', requestItemsData);
+    console.log('Peças escaneadas para envio:', scannedForShipping);
+    console.log('Instâncias selecionadas manualmente:', selectedInstances);
+    console.log('Lista geral de escaneados:', scannedItems);
+    console.log('Instâncias disponíveis:', availableInstances);
 
-    const alertHtml = `
-        <div class="alert alert-success alert-dismissible fade show temp-alert" role="alert">
-            <i class="fas fa-check-circle"></i>
-            ${message}
-            <button type="button" class="close" data-dismiss="alert">
-                <span>&times;</span>
-            </button>
-        </div>
-    `;
+    const totalScanned = Object.values(scannedForShipping).reduce((sum, items) => sum + items.length, 0);
+    const totalSelected = Object.values(selectedInstances).reduce((sum, items) => sum + items.length, 0);
 
-    const container = document.querySelector('.container-fluid');
-    container.insertAdjacentHTML('afterbegin', alertHtml);
-    window.scrollTo(0, 0);
+    let summary = `Total escaneado: ${totalScanned}\nTotal selecionado manualmente: ${totalSelected}\n\n`;
+
+    for (const [itemId, items] of Object.entries(scannedForShipping)) {
+        const itemData = requestItemsData[itemId];
+        const selectedCount = selectedInstances[itemId] ? selectedInstances[itemId].length : 0;
+        summary += `${itemData.partName}: ${items.length} escaneadas + ${selectedCount} selecionadas / ${itemData.quantityNeeded} necessárias\n`;
+    }
+
+    alert(summary + '\nVeja o console para detalhes completos.');
 }
 
-// Função utilitária para debug
-function debugInstances() {
-    console.log('=== DEBUG INSTÂNCIAS ===');
-    const allCheckboxes = document.querySelectorAll('input[name^="instances_"]');
-    console.log(`Total de checkboxes: ${allCheckboxes.length}`);
+// ============= INICIALIZAÇÃO =============
+function initializeShippingSystem() {
+    console.log('Inicializando sistema de envio...');
 
-    const selectedCheckboxes = document.querySelectorAll('input[name^="instances_"]:checked');
-    console.log(`Instâncias selecionadas: ${selectedCheckboxes.length}`);
+    // Garantir que todas as variáveis globais estão definidas
+    if (typeof availableInstances === 'undefined') {
+        window.availableInstances = {};
+        console.log('✅ availableInstances inicializada');
+    }
 
-    selectedCheckboxes.forEach(cb => {
-        console.log(`- ${cb.name}: ${cb.value}`);
+    if (typeof selectedInstances === 'undefined') {
+        window.selectedInstances = {};
+        console.log('✅ selectedInstances inicializada');
+    }
+
+    if (typeof scannedForShipping === 'undefined') {
+        window.scannedForShipping = {};
+        console.log('✅ scannedForShipping inicializada');
+    }
+
+    // Inicializar para cada item da solicitação
+    Object.keys(requestItemsData).forEach(itemId => {
+        if (!selectedInstances[itemId]) {
+            selectedInstances[itemId] = [];
+        }
+        if (!availableInstances[itemId]) {
+            availableInstances[itemId] = [];
+        }
+        if (!scannedForShipping[itemId]) {
+            scannedForShipping[itemId] = [];
+        }
     });
 
-    // Mostrar no alert também
-    alert(`Debug: ${allCheckboxes.length} checkboxes total, ${selectedCheckboxes.length} selecionadas. Veja o console para detalhes.`);
+    console.log('✅ Sistema de envio inicializado com sucesso');
+    console.log('Itens da solicitação:', Object.keys(requestItemsData));
 }
 
-// Inicialização quando a página carrega
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('Sistema de envio inicializado');
+    initializeShippingSystem();
+
+    console.log('Sistema de envio por escaneamento inicializado');
+    console.log('Itens da solicitação:', requestItemsData);
 
     // Adicionar validação ao formulário
     const shippingForm = document.getElementById('shipping-form');
@@ -539,10 +1618,94 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // Auto-carregar instâncias
+    // Focar no campo de leitura manual
     setTimeout(() => {
-        loadAllRequestInstances({{ request.id }});
+        const manualInput = document.getElementById('manualQRInput');
+        if (manualInput) {
+            manualInput.focus();
+        }
+
+        showMessage(`
+            <strong>📦 Sistema Pronto!</strong><br>
+            <small>
+                • <strong>Escaneie, digite ou selecione</strong> as peças para envio<br>
+                • O sistema valida se a peça pertence ao item solicitado<br>
+                • Peças escaneadas têm prioridade sobre seleções manuais
+            </small>
+        `, 'info');
     }, 1000);
 });
+
+// Cleanup ao sair da página
+window.addEventListener('beforeunload', function() {
+    if (isScanning) {
+        stopQRScanner();
+    }
+});
+
+// ============= FUNÇÕES DE TESTE =============
+window.testShippingSystem = function() {
+    console.log('🔧 TESTANDO SISTEMA DE ENVIO...');
+
+    const results = {
+        success: 0,
+        errors: 0,
+        warnings: 0
+    };
+
+    // 1. Testar variáveis globais
+    console.log('\n📋 1. Testando variáveis globais:');
+
+    const globalVars = ['availableInstances', 'selectedInstances', 'scannedForShipping', 'requestItemsData'];
+    globalVars.forEach(varName => {
+        if (typeof window[varName] !== 'undefined') {
+            console.log(`✅ ${varName}: OK`);
+            results.success++;
+        } else {
+            console.error(`❌ ${varName}: UNDEFINED`);
+            results.errors++;
+        }
+    });
+
+    // 2. Testar elementos DOM
+    console.log('\n🏗️ 2. Testando elementos DOM:');
+
+    const domElements = [
+        'manualQRInput',
+        'manualQRResult',
+        'selectionSummaryText',
+        'totalSelectedBadge',
+        'hiddenInputsContainer'
+    ];
+
+    domElements.forEach(elementId => {
+        const element = document.getElementById(elementId);
+        if (element) {
+            console.log(`✅ ${elementId}: ENCONTRADO`);
+            results.success++;
+        } else {
+            console.warn(`⚠️ ${elementId}: NÃO ENCONTRADO`);
+            results.warnings++;
+        }
+    });
+
+    // 3. Resumo dos testes
+    console.log('\n📊 RESUMO DOS TESTES:');
+    console.log(`✅ Sucessos: ${results.success}`);
+    console.log(`⚠️ Avisos: ${results.warnings}`);
+    console.log(`❌ Erros: ${results.errors}`);
+
+    if (results.errors === 0) {
+        console.log('\n🎉 SISTEMA FUNCIONANDO CORRETAMENTE!');
+        showMessage('🎉 Sistema testado com sucesso! Pronto para usar.', 'success');
+    } else {
+        console.log('\n🔧 AINDA HÁ PROBLEMAS A CORRIGIR');
+        showMessage(`🔧 ${results.errors} problemas encontrados. Veja o console para detalhes.`, 'warning');
+    }
+
+    return results;
+};
+
+console.log('🎯 Sistema de envio carregado. Digite testShippingSystem() no console para testar.');
 </script>
 {% endblock %}

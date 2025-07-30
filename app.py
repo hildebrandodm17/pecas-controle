@@ -1948,7 +1948,7 @@ def api_qr_scan():
 @login_required
 @role_required('receptor', 'admin', 'master')
 def api_part_instances(part_id):
-    """Retorna instâncias disponíveis de uma peça para envio"""
+    """Retorna instâncias disponíveis de uma peça para envio - VERSÃO MELHORADA"""
     try:
         # Filtrar por empresa se não for master
         if current_user.role == 'master':
@@ -1958,12 +1958,21 @@ def api_part_instances(part_id):
         else:
             company_id = current_user.company_id
 
+        # Verificar se há filtro por código específico
+        unique_code = request.args.get('unique_code')
+
         # Buscar instâncias disponíveis
-        instances = PartInstance.query.filter_by(
+        query = PartInstance.query.filter_by(
             part_id=part_id,
             company_id=company_id,
             status='em_estoque'
-        ).join(Part).all()
+        )
+
+        # Aplicar filtro de código se especificado
+        if unique_code:
+            query = query.filter_by(unique_code=unique_code)
+
+        instances = query.join(Part).all()
 
         instances_data = []
         for instance in instances:
@@ -1973,16 +1982,20 @@ def api_part_instances(part_id):
                 'created_at': instance.created_at.strftime('%d/%m/%Y %H:%M'),
                 'warranty_expires': instance.warranty_expires.strftime(
                     '%d/%m/%Y') if instance.warranty_expires else None,
-                'part_name': instance.part.name
+                'part_name': instance.part.name,
+                'status': instance.status
             })
 
         return jsonify({
             'success': True,
             'instances': instances_data,
-            'total': len(instances_data)
+            'total': len(instances_data),
+            'part_id': part_id,
+            'company_id': company_id
         })
 
     except Exception as e:
+        print(f"DEBUG: Erro ao buscar instâncias: {e}")
         return jsonify({'success': False, 'message': str(e)})
 
 
@@ -2505,6 +2518,92 @@ def fix_duplicate_codes():
     return redirect(url_for('system_diagnostics'))
 
 
+@app.route('/api/quick-search/<code>')
+@login_required
+def api_quick_search(code):
+    """API para busca rápida de códigos de instâncias"""
+    try:
+        company_id = request.args.get('company_id')
+
+        # Se não for master, usar empresa do usuário
+        if current_user.role != 'master':
+            company_id = current_user.company_id
+
+        if not company_id:
+            return jsonify({
+                'success': False,
+                'message': 'Company ID é obrigatório'
+            })
+
+        print(f"DEBUG: Buscando código '{code}' na empresa {company_id}")
+
+        # Buscar instância pelo código único
+        instance = PartInstance.query.filter_by(
+            unique_code=code,
+            company_id=company_id
+        ).first()
+
+        if instance:
+            print(f"DEBUG: Instância encontrada: {instance.unique_code}, Status: {instance.status}")
+
+            # Verificar se está disponível em estoque
+            if instance.status != 'em_estoque':
+                return jsonify({
+                    'success': False,
+                    'found': True,
+                    'message': f'Instância encontrada mas não está em estoque (Status: {instance.status})',
+                    'instance': {
+                        'id': instance.id,
+                        'unique_code': instance.unique_code,
+                        'part_id': instance.part_id,
+                        'part_name': instance.part.name,
+                        'status': instance.status,
+                        'created_at': instance.created_at.strftime('%d/%m/%Y %H:%M')
+                    }
+                })
+
+            return jsonify({
+                'success': True,
+                'found': True,
+                'message': 'Instância encontrada e disponível',
+                'instance': {
+                    'id': instance.id,
+                    'unique_code': instance.unique_code,
+                    'part_id': instance.part_id,
+                    'part_name': instance.part.name,
+                    'status': instance.status,
+                    'created_at': instance.created_at.strftime('%d/%m/%Y %H:%M'),
+                    'company_id': instance.company_id
+                }
+            })
+
+        # Se não encontrou, buscar códigos similares para sugestões
+        print(f"DEBUG: Instância não encontrada, buscando similares...")
+
+        similar_codes = PartInstance.query.filter(
+            PartInstance.unique_code.ilike(f'%{code[:5]}%'),  # Buscar por prefixo
+            PartInstance.company_id == company_id,
+            PartInstance.status == 'em_estoque'
+        ).limit(5).all()
+
+        suggestions = [inst.unique_code for inst in similar_codes]
+
+        print(f"DEBUG: Códigos similares encontrados: {suggestions}")
+
+        return jsonify({
+            'success': False,
+            'found': False,
+            'message': f'Código {code} não encontrado em estoque',
+            'suggestions': suggestions
+        })
+
+    except Exception as e:
+        print(f"DEBUG: Erro na busca rápida: {e}")
+        return jsonify({
+            'success': False,
+            'found': False,
+            'message': f'Erro interno: {str(e)}'
+        })
 @app.route('/admin/system-info')
 @login_required
 @role_required('master')
