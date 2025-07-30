@@ -1,0 +1,599 @@
+<!-- templates/view_request.html -->
+{% extends "base.html" %}
+
+{% block title %}Solicitação #{{ request.id }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-file-text"></i> Solicitação #{{ request.id }}
+        <span class="badge
+            {% if request.status == 'pendente' %}bg-warning
+            {% elif request.status == 'enviado' %}bg-primary
+            {% elif request.status == 'recebido' %}bg-success
+            {% else %}bg-secondary
+            {% endif %}">
+            {{ request.status|title }}
+        </span>
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('my_requests') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar
+        </a>
+
+        {% if current_user.role in ['receptor', 'admin', 'master'] and request.status == 'pendente' %}
+        <a href="{{ url_for('ship_request', id=request.id) }}" class="btn btn-success ms-2">
+            <i class="bi bi-truck"></i> Enviar Peças
+        </a>
+        {% endif %}
+
+        {% if current_user.role in ['receptor', 'admin', 'master'] and request.status == 'enviado' %}
+        <button class="btn btn-info ms-2" onclick="markAsReceived()">
+            <i class="bi bi-check-circle"></i> Marcar como Recebido
+        </button>
+        {% endif %}
+
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-three-dots"></i> Ações
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="printRequest()">
+                    <i class="bi bi-printer"></i> Imprimir
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="exportToPDF()">
+                    <i class="bi bi-file-pdf"></i> Exportar PDF
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                {% if request.status == 'pendente' and (current_user.id == request.requester_id or current_user.role in ['admin', 'master']) %}
+                <li><a class="dropdown-item text-warning" href="#" onclick="cancelRequest()">
+                    <i class="bi bi-x-circle"></i> Cancelar Solicitação
+                </a></li>
+                {% endif %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- Informações Principais -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <!-- Card de Status -->
+        <div class="card h-100">
+            <div class="card-header text-center">
+                <h5 class="card-title mb-0">
+                    Status da Solicitação
+                </h5>
+            </div>
+            <div class="card-body text-center">
+                <div class="mb-3">
+                    {% if request.status == 'pendente' %}
+                    <i class="bi bi-clock-fill text-warning" style="font-size: 3rem;"></i>
+                    <h4 class="text-warning mt-2">Pendente</h4>
+                    <p class="text-muted">Aguardando processamento</p>
+                    {% elif request.status == 'enviado' %}
+                    <i class="bi bi-truck text-primary" style="font-size: 3rem;"></i>
+                    <h4 class="text-primary mt-2">Enviado</h4>
+                    <p class="text-muted">Peças em trânsito</p>
+                    {% elif request.status == 'recebido' %}
+                    <i class="bi bi-check-circle-fill text-success" style="font-size: 3rem;"></i>
+                    <h4 class="text-success mt-2">Recebido</h4>
+                    <p class="text-muted">Solicitação concluída</p>
+                    {% else %}
+                    <i class="bi bi-x-circle-fill text-secondary" style="font-size: 3rem;"></i>
+                    <h4 class="text-secondary mt-2">{{ request.status|title }}</h4>
+                    <p class="text-muted">Status especial</p>
+                    {% endif %}
+                </div>
+
+                <!-- Timeline básica -->
+                <div class="timeline-simple">
+                    <div class="timeline-item {{ 'active' if request.status in ['pendente', 'enviado', 'recebido'] else '' }}">
+                        <i class="bi bi-plus-circle"></i>
+                        <span>Criada</span>
+                    </div>
+                    <div class="timeline-item {{ 'active' if request.status in ['enviado', 'recebido'] else '' }}">
+                        <i class="bi bi-truck"></i>
+                        <span>Enviada</span>
+                    </div>
+                    <div class="timeline-item {{ 'active' if request.status == 'recebido' else '' }}">
+                        <i class="bi bi-check-circle"></i>
+                        <span>Recebida</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <!-- Informações Detalhadas -->
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-info-circle"></i> Informações Detalhadas
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-5">ID:</dt>
+                            <dd class="col-sm-7">#{{ request.id }}</dd>
+
+                            <dt class="col-sm-5">Solicitante:</dt>
+                            <dd class="col-sm-7">
+                                <div class="d-flex align-items-center">
+                                    <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2">
+                                        {{ request.requester.username[0]|upper }}
+                                    </div>
+                                    <div>
+                                        <strong>{{ request.requester.username }}</strong>
+                                        <br><small class="text-muted">{{ request.requester.email }}</small>
+                                    </div>
+                                </div>
+                            </dd>
+
+                            <dt class="col-sm-5">Empresa:</dt>
+                            <dd class="col-sm-7">
+                                <i class="bi bi-building text-primary"></i>
+                                {{ request.company.name }}
+                            </dd>
+
+                            <dt class="col-sm-5">Local:</dt>
+                            <dd class="col-sm-7">
+                                <i class="bi bi-geo-alt text-info"></i>
+                                {{ request.location.name }}
+                                {% if request.location.description %}
+                                <br><small class="text-muted">{{ request.location.description }}</small>
+                                {% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                    <div class="col-md-6">
+                        <dl class="row">
+                            <dt class="col-sm-5">Criada em:</dt>
+                            <dd class="col-sm-7">
+                                <strong>{{ request.created_at.strftime('%d/%m/%Y') }}</strong><br>
+                                <small class="text-muted">{{ request.created_at.strftime('%H:%M:%S') }}</small>
+                            </dd>
+
+                            {% if request.equipment %}
+                            <dt class="col-sm-5">Equipamento:</dt>
+                            <dd class="col-sm-7">
+                                <i class="bi bi-pc-desktop text-secondary"></i>
+                                {{ request.equipment.name }}
+                                {% if request.equipment.model %}
+                                <br><small class="text-muted">{{ request.equipment.model }}</small>
+                                {% endif %}
+                            </dd>
+                            {% endif %}
+
+                            <dt class="col-sm-5">Total de Itens:</dt>
+                            <dd class="col-sm-7">
+                                {% set total_requested = request.items|sum(attribute='quantity_requested') %}
+                                <span class="badge bg-info fs-6">{{ total_requested }}</span>
+                            </dd>
+
+                            <dt class="col-sm-5">Tempo Decorrido:</dt>
+                            <dd class="col-sm-7">
+                                {% set days_ago = (now - request.created_at).days %}
+                                {% if days_ago == 0 %}
+                                <span class="badge bg-success">Hoje</span>
+                                {% elif days_ago == 1 %}
+                                <span class="badge bg-primary">1 dia</span>
+                                {% elif days_ago <= 3 %}
+                                <span class="badge bg-warning">{{ days_ago }} dias</span>
+                                {% else %}
+                                <span class="badge bg-danger">{{ days_ago }} dias</span>
+                                {% endif %}
+                            </dd>
+                        </dl>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Observações -->
+{% if request.notes %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-chat-left-text"></i> Observações
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="alert alert-light">
+            <p class="mb-0">{{ request.notes }}</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Itens Solicitados -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-list-check"></i> Itens Solicitados ({{ request.items|length }})
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Peça</th>
+                        <th>Código</th>
+                        <th class="text-center">Solicitado</th>
+                        <th class="text-center">Enviado</th>
+                        <th class="text-center">Recebido</th>
+                        <th class="text-center">Status</th>
+                        <th>Disponível</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in request.items %}
+                    <tr>
+                        <td>
+                            <div class="d-flex align-items-center">
+                                <div class="me-3">
+                                    <i class="bi bi-{{ 'laptop' if item.part.category == 'Informática' else 'cpu' if item.part.category == 'Eletrônicos' else 'house' if item.part.category == 'Móveis' else 'ethernet' if item.part.category == 'Cabos' else 'gear' }} text-primary"></i>
+                                </div>
+                                <div>
+                                    <strong>{{ item.part.name }}</strong>
+                                    {% if item.part.description %}
+                                    <br><small class="text-muted">{{ item.part.description[:100] }}{% if item.part.description|length > 100 %}...{% endif %}</small>
+                                    {% endif %}
+                                    {% if item.part.category %}
+                                    <br><span class="badge bg-secondary">{{ item.part.category }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            {% if item.part.base_code %}
+                            <code class="bg-light p-1 rounded">{{ item.part.base_code }}</code>
+                            {% endif %}
+                            {% if item.part.part_number %}
+                            <br><small class="text-muted">{{ item.part.part_number }}</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-info">{{ item.quantity_requested }}</span>
+                            <br><small class="text-muted">{{ item.part.unit_measure or 'unidade' }}</small>
+                        </td>
+                        <td class="text-center">
+                            {% if item.quantity_sent > 0 %}
+                            <span class="badge bg-primary">{{ item.quantity_sent }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if item.quantity_received > 0 %}
+                            <span class="badge bg-success">{{ item.quantity_received }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if item.quantity_received >= item.quantity_requested %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check-circle"></i> Completo
+                            </span>
+                            {% elif item.quantity_sent > 0 %}
+                            <span class="badge bg-primary">
+                                <i class="bi bi-truck"></i> Enviado
+                            </span>
+                            {% else %}
+                            <span class="badge bg-warning">
+                                <i class="bi bi-clock"></i> Pendente
+                            </span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% set available_stock = 0 %}
+                            {% for stock in item.part.stocks %}
+                                {% if current_user.role == 'master' or stock.company_id == current_user.company_id %}
+                                    {% set available_stock = available_stock + stock.quantity %}
+                                {% endif %}
+                            {% endfor %}
+                            {% if available_stock >= item.quantity_requested %}
+                            <span class="badge bg-success">
+                                <i class="bi bi-check"></i> {{ available_stock }}
+                            </span>
+                            {% elif available_stock > 0 %}
+                            <span class="badge bg-warning">
+                                <i class="bi bi-exclamation-triangle"></i> {{ available_stock }}
+                            </span>
+                            {% else %}
+                            <span class="badge bg-danger">
+                                <i class="bi bi-x"></i> {{ available_stock }}
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Histórico de Envios -->
+{% if request.shipments %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-truck"></i> Histórico de Envios ({{ request.shipments|length }})
+        </h5>
+    </div>
+    <div class="card-body">
+        {% for shipment in request.shipments %}
+        <div class="card mb-3 border-primary">
+            <div class="card-header bg-light">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h6 class="mb-0">
+                            <i class="bi bi-box-seam"></i> Envio #{{ shipment.id }}
+                        </h6>
+                        <small class="text-muted">{{ shipment.sent_at.strftime('%d/%m/%Y às %H:%M') }}</small>
+                    </div>
+                    <div class="col-md-6 text-end">
+                        <strong>Por:</strong> {{ shipment.sender.username }}
+                        {% if shipment.tracking_number %}
+                        <br><small><strong>Rastreamento:</strong> {{ shipment.tracking_number }}</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                {% if shipment.shipping_method %}
+                <div class="mb-2">
+                    <strong>Método de Envio:</strong> {{ shipment.shipping_method }}
+                </div>
+                {% endif %}
+
+                {% if shipment.notes %}
+                <div class="mb-2">
+                    <strong>Observações:</strong> {{ shipment.notes }}
+                </div>
+                {% endif %}
+
+                <div class="mb-2">
+                    <strong>Itens Enviados:</strong>
+                </div>
+                <div class="row">
+                    {% for shipment_item in shipment.items %}
+                    <div class="col-md-6 mb-2">
+                        <div class="p-2 bg-light rounded">
+                            <strong>{{ shipment_item.part_instance.part.name }}</strong><br>
+                            <code class="text-primary">{{ shipment_item.part_instance.unique_code }}</code>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Timeline de Atividades -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-clock-history"></i> Timeline de Atividades
+        </h5>
+    </div>
+    <div class="card-body">
+        <div class="timeline">
+            <!-- Criação da solicitação -->
+            <div class="timeline-item">
+                <div class="timeline-marker bg-primary">
+                    <i class="bi bi-plus-circle"></i>
+                </div>
+                <div class="timeline-content">
+                    <h6>Solicitação Criada</h6>
+                    <p class="text-muted mb-0">
+                        Por <strong>{{ request.requester.username }}</strong> em {{ request.created_at.strftime('%d/%m/%Y às %H:%M') }}
+                    </p>
+                </div>
+            </div>
+
+            <!-- Envios -->
+            {% for shipment in request.shipments %}
+            <div class="timeline-item">
+                <div class="timeline-marker bg-info">
+                    <i class="bi bi-truck"></i>
+                </div>
+                <div class="timeline-content">
+                    <h6>Peças Enviadas</h6>
+                    <p class="text-muted mb-0">
+                        Por <strong>{{ shipment.sender.username }}</strong> em {{ shipment.sent_at.strftime('%d/%m/%Y às %H:%M') }}
+                        <br><small>{{ shipment.items|length }} item(s) enviado(s)</small>
+                    </p>
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- Status final -->
+            {% if request.status == 'recebido' %}
+            <div class="timeline-item">
+                <div class="timeline-marker bg-success">
+                    <i class="bi bi-check-circle"></i>
+                </div>
+                <div class="timeline-content">
+                    <h6>Solicitação Concluída</h6>
+                    <p class="text-muted mb-0">
+                        Todas as peças foram recebidas
+                    </p>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function markAsReceived() {
+    if (confirm('Confirmar que todas as peças foram recebidas?')) {
+        fetch(`/api/requests/{{ request.id }}/receive`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.message);
+            }
+        })
+        .catch(error => alert('Erro: ' + error));
+    }
+}
+
+function cancelRequest() {
+    if (confirm('Tem certeza que deseja cancelar esta solicitação?')) {
+        // Implementar cancelamento
+        alert('Funcionalidade em desenvolvimento');
+    }
+}
+
+function printRequest() {
+    window.print();
+}
+
+function exportToPDF() {
+    // Implementar exportação PDF
+    alert('Funcionalidade em desenvolvimento');
+}
+</script>
+
+<style>
+.avatar-sm {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.timeline {
+    position: relative;
+    padding: 20px 0;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 30px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 30px;
+    padding-left: 80px;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: 20px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 1.2rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.timeline-content {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 15px;
+}
+
+.timeline-simple {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+    position: relative;
+}
+
+.timeline-simple::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: #e9ecef;
+    z-index: 1;
+}
+
+.timeline-simple .timeline-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: white;
+    padding: 10px;
+    z-index: 2;
+    position: relative;
+}
+
+.timeline-simple .timeline-item i {
+    font-size: 1.5rem;
+    color: #6c757d;
+    margin-bottom: 5px;
+}
+
+.timeline-simple .timeline-item.active i {
+    color: #0d6efd;
+}
+
+.timeline-simple .timeline-item span {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #6c757d;
+}
+
+.timeline-simple .timeline-item.active span {
+    color: #0d6efd;
+}
+
+@media (max-width: 768px) {
+    .timeline-item {
+        padding-left: 50px;
+    }
+
+    .timeline-marker {
+        left: 5px;
+        width: 30px;
+        height: 30px;
+        font-size: 1rem;
+    }
+
+    .timeline::before {
+        left: 15px;
+    }
+}
+
+@media print {
+    .btn, .dropdown, .card-header .btn-toolbar {
+        display: none !important;
+    }
+}
+</style>
+
+{% endblock %}

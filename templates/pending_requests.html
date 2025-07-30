@@ -1,0 +1,343 @@
+<!-- templates/pending_requests.html -->
+{% extends "base.html" %}
+
+{% block title %}Solicitações Pendentes{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">
+        <i class="bi bi-clock-fill"></i> Solicitações Pendentes
+        {% if requests %}
+        <span class="badge bg-warning">{{ requests|length }}</span>
+        {% endif %}
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('my_requests') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-list-ul"></i> Todas as Solicitações
+        </a>
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-outline-primary dropdown-toggle" data-bs-toggle="dropdown">
+                <i class="bi bi-funnel"></i> Filtros
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="?filter=today">Hoje</a></li>
+                <li><a class="dropdown-item" href="?filter=week">Esta Semana</a></li>
+                <li><a class="dropdown-item" href="?filter=urgent">Urgentes</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="?filter=all">Todas</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+{% if requests %}
+<!-- Resumo -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <div class="h4 mb-0">{{ requests|length }}</div>
+                <small>Pendentes</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body text-center">
+                {% set urgent_count = 0 %}
+                {% for req in requests %}
+                    {% set days_ago = (now - req.created_at).days %}
+                    {% if days_ago >= 3 %}
+                        {% set urgent_count = urgent_count + 1 %}
+                    {% endif %}
+                {% endfor %}
+                <div class="h4 mb-0">{{ urgent_count }}</div>
+                <small>Urgentes (3+ dias)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                {% set total_items = 0 %}
+                {% for req in requests %}
+                    {% for item in req.items %}
+                        {% set total_items = total_items + item.quantity_requested %}
+                    {% endfor %}
+                {% endfor %}
+                <div class="h4 mb-0">{{ total_items }}</div>
+                <small>Itens Totais</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <div class="h4 mb-0">{{ requests|map(attribute='requester')|map(attribute='username')|unique|list|length }}</div>
+                <small>Solicitantes</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de Solicitações -->
+<div class="row">
+    {% for request in requests %}
+    {% set days_ago = (now - request.created_at).days %}
+    <div class="col-lg-6 mb-4">
+        <div class="card h-100 {{ 'border-danger' if days_ago >= 3 else 'border-warning' if days_ago >= 1 else '' }}">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-file-text"></i> Solicitação #{{ request.id }}
+                        {% if days_ago >= 3 %}
+                        <span class="badge bg-danger ms-2">Urgente</span>
+                        {% elif days_ago >= 1 %}
+                        <span class="badge bg-warning ms-2">Atrasada</span>
+                        {% else %}
+                        <span class="badge bg-primary ms-2">Nova</span>
+                        {% endif %}
+                    </h6>
+                    <small class="text-muted">
+                        <i class="bi bi-calendar"></i> {{ request.created_at.strftime('%d/%m/%Y às %H:%M') }}
+                        ({{ days_ago }} dia{{ 's' if days_ago != 1 else '' }} atrás)
+                    </small>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-three-dots"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="{{ url_for('view_request', id=request.id) }}">
+                            <i class="bi bi-eye"></i> Ver Detalhes
+                        </a></li>
+                        <li><a class="dropdown-item" href="{{ url_for('ship_request', id=request.id) }}">
+                            <i class="bi bi-truck"></i> Enviar Peças
+                        </a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item text-muted" href="#" onclick="markAsUrgent({{ request.id }})">
+                            <i class="bi bi-exclamation-triangle"></i> Marcar Urgente
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <!-- Informações do Solicitante -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="d-flex align-items-center">
+                            <div class="avatar-sm bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2">
+                                {{ request.requester.username[0]|upper }}
+                            </div>
+                            <div>
+                                <strong>{{ request.requester.username }}</strong>
+                                <br><small class="text-muted">{{ request.company.name }}</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="text-end">
+                            <small class="text-muted">
+                                <i class="bi bi-geo-alt"></i> {{ request.location.name }}
+                                {% if request.equipment %}
+                                <br><i class="bi bi-pc-desktop"></i> {{ request.equipment.name }}
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Itens Solicitados -->
+                <div class="mb-3">
+                    <h6 class="text-muted mb-2">
+                        <i class="bi bi-list-check"></i> Itens Solicitados ({{ request.items|length }})
+                    </h6>
+                    <div class="row">
+                        {% for item in request.items %}
+                        <div class="col-12 mb-2">
+                            <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded">
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        <i class="bi bi-{{ 'laptop' if item.part.category == 'Informática' else 'cpu' if item.part.category == 'Eletrônicos' else 'house' if item.part.category == 'Móveis' else 'ethernet' if item.part.category == 'Cabos' else 'gear' }} text-primary"></i>
+                                    </div>
+                                    <div>
+                                        <strong>{{ item.part.name }}</strong>
+                                        {% if item.part.base_code %}
+                                        <br><small class="text-muted">
+                                            <code>{{ item.part.base_code }}</code>
+                                        </small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="text-end">
+                                    <span class="badge bg-info">{{ item.quantity_requested }}</span>
+                                    <br><small class="text-muted">{{ item.part.unit_measure or 'unidade' }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Observações -->
+                {% if request.notes %}
+                <div class="mb-3">
+                    <h6 class="text-muted mb-1">
+                        <i class="bi bi-chat-left-text"></i> Observações
+                    </h6>
+                    <div class="alert alert-light mb-0">
+                        <small>{{ request.notes }}</small>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Status de Disponibilidade -->
+                <div class="mb-3">
+                    <h6 class="text-muted mb-2">
+                        <i class="bi bi-check-circle"></i> Disponibilidade
+                    </h6>
+                    {% set can_fulfill = true %}
+                    {% for item in request.items %}
+                        {% set available_stock = 0 %}
+                        {% for stock in item.part.stocks %}
+                            {% if current_user.role == 'master' or stock.company_id == current_user.company_id %}
+                                {% set available_stock = available_stock + stock.quantity %}
+                            {% endif %}
+                        {% endfor %}
+
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>{{ item.part.name }}</span>
+                            <div>
+                                {% if available_stock >= item.quantity_requested %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-check"></i> {{ available_stock }} disponível
+                                </span>
+                                {% else %}
+                                <span class="badge bg-danger">
+                                    <i class="bi bi-x"></i> Apenas {{ available_stock }} disponível
+                                </span>
+                                {% set can_fulfill = false %}
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="card-footer">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        {% if can_fulfill %}
+                        <span class="badge bg-success">
+                            <i class="bi bi-check-circle"></i> Pode ser atendida
+                        </span>
+                        {% else %}
+                        <span class="badge bg-warning">
+                            <i class="bi bi-exclamation-triangle"></i> Estoque insuficiente
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <a href="{{ url_for('view_request', id=request.id) }}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i> Ver
+                        </a>
+                        {% if can_fulfill %}
+                        <a href="{{ url_for('ship_request', id=request.id) }}" class="btn btn-sm btn-success">
+                            <i class="bi bi-truck"></i> Enviar
+                        </a>
+                        {% else %}
+                        <button class="btn btn-sm btn-outline-warning" onclick="checkStock({{ request.id }})">
+                            <i class="bi bi-search"></i> Verificar Estoque
+                        </button>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+{% else %}
+<!-- Estado Vazio -->
+<div class="card">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-check-circle" style="font-size: 4rem; color: #28a745;"></i>
+        <h4 class="mt-3 text-success">Nenhuma solicitação pendente!</h4>
+        <p class="text-muted">
+            Parabéns! Todas as solicitações foram processadas.
+        </p>
+        <div class="row justify-content-center mt-4">
+            <div class="col-md-6">
+                <div class="card bg-light">
+                    <div class="card-body">
+                        <h6>Você pode:</h6>
+                        <ul class="text-start">
+                            <li>Ver <a href="{{ url_for('my_requests') }}">todas as solicitações</a></li>
+                            <li>Verificar o <a href="{{ url_for('manage_stock') }}">estoque atual</a></li>
+                            <li>Gerar <a href="{{ url_for('reports') }}">relatórios</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+function markAsUrgent(requestId) {
+    if (confirm('Marcar esta solicitação como urgente?')) {
+        // Implementar marcação como urgente
+        alert('Funcionalidade em desenvolvimento');
+    }
+}
+
+function checkStock(requestId) {
+    // Redirecionar para página de estoque
+    window.location.href = `/stock?request_id=${requestId}`;
+}
+
+// Auto-refresh a cada 30 segundos
+setTimeout(function() {
+    location.reload();
+}, 30000);
+</script>
+
+<style>
+.avatar-sm {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+    font-weight: bold;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.border-danger {
+    border-color: #dc3545 !important;
+    border-width: 2px !important;
+}
+
+.border-warning {
+    border-color: #ffc107 !important;
+    border-width: 2px !important;
+}
+
+@media (max-width: 768px) {
+    .col-lg-6 {
+        margin-bottom: 1rem;
+    }
+
+    .card-body {
+        padding: 1rem;
+    }
+}
+</style>
+
+{% endblock %}

@@ -68,7 +68,8 @@
                                        value="{{ part.name if edit else '' }}"
                                        required
                                        placeholder="Ex: Monitor 17 polegadas"
-                                       maxlength="100">
+                                       maxlength="100"
+                                       onkeyup="generateCodePreview()">
                                 <div class="form-text">
                                     Nome claro e identificável da peça
                                 </div>
@@ -77,8 +78,46 @@
 
                         <div class="col-md-4">
                             <div class="mb-3">
+                                <label for="base_code" class="form-label">
+                                    <i class="bi bi-upc-scan"></i> Código Base *
+                                </label>
+                                <div class="input-group">
+                                    <input type="text"
+                                           class="form-control"
+                                           id="base_code"
+                                           name="base_code"
+                                           value="{{ part.base_code if edit else '' }}"
+                                           readonly
+                                           placeholder="Será gerado automaticamente"
+                                           style="background-color: #f8f9fa;"
+                                           required>
+                                    <button type="button"
+                                            class="btn btn-outline-secondary"
+                                            onclick="regenerateBaseCode()"
+                                            title="Regenerar código">
+                                        <i class="bi bi-arrow-clockwise"></i>
+                                    </button>
+                                </div>
+                                <div class="form-text">
+                                    Preview: <span id="codePreview" class="text-primary font-monospace">{{ part.base_code if edit else 'Digite o nome acima' }}</span>
+                                </div>
+                                {% if edit and part.instances %}
+                                <div class="form-text">
+                                    <small class="text-info">
+                                        <i class="bi bi-info-circle"></i>
+                                        {{ part.instances|length }} instâncias criadas
+                                    </small>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
                                 <label for="part_number" class="form-label">
-                                    <i class="bi bi-upc"></i> Código da Peça
+                                    <i class="bi bi-upc"></i> Código Manual (Opcional)
                                 </label>
                                 <input type="text"
                                        class="form-control"
@@ -88,7 +127,33 @@
                                        placeholder="Ex: MON-17-001"
                                        maxlength="50">
                                 <div class="form-text">
-                                    Código único (opcional)
+                                    Código adicional personalizado (se necessário)
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">
+                                    <i class="bi bi-123"></i> Próximas Instâncias
+                                </label>
+                                <div class="bg-light p-2 rounded" id="instancePreview">
+                                    {% if edit and part.base_code %}
+                                    <small class="text-muted">
+                                        Próximos códigos:
+                                        {% set next_num = part.instances|length + 1 %}
+                                        <code>{{ part.base_code }}{{ '%03d'|format(next_num) }}</code>,
+                                        <code>{{ part.base_code }}{{ '%03d'|format(next_num + 1) }}</code>,
+                                        <code>{{ part.base_code }}{{ '%03d'|format(next_num + 2) }}</code>...
+                                    </small>
+                                    {% else %}
+                                    <small class="text-muted">
+                                        Exemplo: <span id="exampleCodes">CODIGO001, CODIGO002, CODIGO003...</span>
+                                    </small>
+                                    {% endif %}
+                                </div>
+                                <div class="form-text">
+                                    Preview dos códigos que serão gerados no estoque
                                 </div>
                             </div>
                         </div>
@@ -280,6 +345,13 @@
                         {{ part.description if edit and part.description else 'Descrição aparecerá aqui...' }}
                     </p>
 
+                    <div class="mb-3">
+                        <code class="bg-light p-2 rounded" id="previewCode">
+                            {{ part.base_code if edit else 'CODIGO' }}
+                        </code>
+                        <br><small class="text-muted">Código Base</small>
+                    </div>
+
                     <div class="row text-center">
                         <div class="col-6">
                             <div class="border-end">
@@ -388,17 +460,96 @@
 </div>
 
 <script>
+// Gerar código base automaticamente
+function generateBaseCode(partName) {
+    if (!partName) return '';
+
+    // Converter para maiúsculo e remover acentos
+    let cleanName = partName.toUpperCase()
+        .replace(/[ÀÁÂÃÄÅ]/g, 'A')
+        .replace(/[ÈÉÊË]/g, 'E')
+        .replace(/[ÌÍÎÏ]/g, 'I')
+        .replace(/[ÒÓÔÕÖ]/g, 'O')
+        .replace(/[ÙÚÛÜ]/g, 'U')
+        .replace(/[Ç]/g, 'C');
+
+    // Dividir em palavras
+    const words = cleanName.split(/\s+/);
+    let code = '';
+
+    words.forEach(word => {
+        // Extrair letras e números
+        const letters = word.replace(/[^A-Z]/g, '');
+        const numbers = word.replace(/[^0-9]/g, '');
+
+        // Adicionar primeiras 3 letras ou todas se menor
+        if (letters.length >= 3) {
+            code += letters.substring(0, 3);
+        } else if (letters.length > 0) {
+            code += letters;
+        }
+
+        // Adicionar números
+        if (numbers) {
+            code += numbers;
+        }
+    });
+
+    // Limitar a 10 caracteres
+    return code.substring(0, 10);
+}
+
+// Atualizar preview do código
+function generateCodePreview() {
+    const name = document.getElementById('name').value;
+    const baseCode = generateBaseCode(name);
+
+    document.getElementById('base_code').value = baseCode;
+    document.getElementById('codePreview').textContent = baseCode || 'Digite o nome acima';
+
+    // Atualizar preview das instâncias
+    if (baseCode) {
+        document.getElementById('exampleCodes').textContent =
+            `${baseCode}001, ${baseCode}002, ${baseCode}003...`;
+    }
+
+    updatePreview();
+}
+
+// Regenerar código manualmente
+function regenerateBaseCode() {
+    const name = document.getElementById('name').value;
+    if (!name) {
+        alert('Digite o nome da peça primeiro!');
+        document.getElementById('name').focus();
+        return;
+    }
+
+    generateCodePreview();
+
+    // Feedback visual
+    const button = event.target.closest('button');
+    const icon = button.querySelector('i');
+    icon.className = 'bi bi-check text-success';
+
+    setTimeout(() => {
+        icon.className = 'bi bi-arrow-clockwise';
+    }, 1000);
+}
+
 // Preview em tempo real
 function updatePreview() {
     const name = document.getElementById('name').value || 'Nome da Peça';
     const description = document.getElementById('description').value || 'Descrição aparecerá aqui...';
     const category = document.getElementById('category').value || 'Categoria';
     const unit = document.getElementById('unit_measure').value || 'Unidade';
+    const baseCode = document.getElementById('base_code').value || 'CODIGO';
 
     document.getElementById('previewName').textContent = name;
     document.getElementById('previewDescription').textContent = description;
     document.getElementById('previewCategory').textContent = category;
     document.getElementById('previewUnit').textContent = unit;
+    document.getElementById('previewCode').textContent = baseCode;
 
     // Atualizar ícone baseado na categoria
     const iconMap = {
@@ -415,7 +566,7 @@ function updatePreview() {
 }
 
 // Event listeners para preview
-document.getElementById('name').addEventListener('input', updatePreview);
+document.getElementById('name').addEventListener('input', generateCodePreview);
 document.getElementById('description').addEventListener('input', updatePreview);
 document.getElementById('category').addEventListener('change', function() {
     handleCategoryChange();
@@ -533,6 +684,14 @@ function togglePartStatus() {
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', function() {
+    // Gerar código se for uma nova peça
+    {% if not edit %}
+    const nameField = document.getElementById('name');
+    if (nameField.value) {
+        generateCodePreview();
+    }
+    {% endif %}
+
     updatePreview();
     loadCategories();
 });
@@ -556,6 +715,27 @@ document.addEventListener('DOMContentLoaded', function() {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     transition: all 0.3s ease;
+}
+
+#base_code {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    color: #0d6efd !important;
+}
+
+#codePreview {
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.font-monospace {
+    font-family: 'Courier New', monospace !important;
+}
+
+#instancePreview {
+    min-height: 45px;
+    display: flex;
+    align-items: center;
 }
 </style>
 

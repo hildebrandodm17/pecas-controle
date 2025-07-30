@@ -1,194 +1,725 @@
+<!-- templates/qr_codes.html -->
 {% extends "base.html" %}
 
-{% block title %}Geração de QR Codes{% endblock %}
+{% block title %}QR Codes - Etiquetas de Identificação{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Geração de QR Codes</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
+    <h1 class="h2">
+        <i class="bi bi-qr-code"></i> QR Codes - Etiquetas
         {% if instances %}
-        <a href="{{ url_for('download_qr_codes', company_id=current_company_id) }}"
-           class="btn btn-primary">
-            <i class="bi bi-download"></i> Baixar PDF
-        </a>
+        <span class="badge bg-primary">{{ instances|length }}</span>
         {% endif %}
-        <button type="button" class="btn btn-outline-secondary ms-2" onclick="startQRScanner()">
-            <i class="bi bi-camera"></i> Ler QR Code
-        </button>
-    </div>
-</div>
-
-{% if current_user.role == 'master' %}
-<div class="mb-3">
-    <form method="GET" class="row g-3">
-        <div class="col-auto">
-            <label for="company_id" class="form-label">Filtrar por Empresa:</label>
-        </div>
-        <div class="col-auto">
-            <select name="company_id" id="company_id" class="form-select" onchange="this.form.submit()">
+    </h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('manage_stock') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar ao Estoque
+        </a>
+        
+        {% if current_user.role == 'master' %}
+        <div class="btn-group ms-2">
+            <select class="form-select" id="companyFilter" onchange="filterByCompany()">
+                <option value="">Todas as empresas</option>
                 {% for company in companies %}
-                <option value="{{ company.id }}" {{ 'selected' if company.id == current_company_id else '' }}>
+                <option value="{{ company.id }}" {% if company.id == current_company_id %}selected{% endif %}>
                     {{ company.name }}
                 </option>
                 {% endfor %}
             </select>
         </div>
-    </form>
-</div>
-{% endif %}
-
-<!-- Scanner de QR Code -->
-<div id="qr-scanner" class="card mb-4" style="display: none;">
-    <div class="card-header">
-        <h5 class="card-title mb-0">
-            <i class="bi bi-camera"></i> Scanner de QR Code
-        </h5>
+        {% endif %}
+        
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-success" onclick="selectAll()">
+                <i class="bi bi-check-square"></i> Selecionar Todos
+            </button>
+            <button type="button" class="btn btn-outline-secondary" onclick="selectNone()">
+                <i class="bi bi-square"></i> Limpar Seleção
+            </button>
+        </div>
+        
+        <div class="btn-group ms-2">
+            <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown" id="printButton" disabled>
+                <i class="bi bi-printer"></i> Imprimir
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="printSelected('small')">
+                    <i class="bi bi-file-pdf"></i> Etiquetas Pequenas (4x2cm)
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="printSelected('medium')">
+                    <i class="bi bi-file-pdf"></i> Etiquetas Médias (6x3cm)
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="printSelected('large')">
+                    <i class="bi bi-file-pdf"></i> Etiquetas Grandes (8x4cm)
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="#" onclick="printSelected('sheet')">
+                    <i class="bi bi-grid-3x3"></i> Folha A4 (20 por página)
+                </a></li>
+            </ul>
+        </div>
     </div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <div id="qr-reader" style="width: 100%;"></div>
-                <button type="button" class="btn btn-secondary mt-2" onclick="stopQRScanner()">
-                    Parar Scanner
-                </button>
+</div>
+
+<!-- Resumo e Filtros -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body text-center">
+                <div class="h4 mb-0" id="totalCount">{{ instances|length }}</div>
+                <small>Total de Etiquetas</small>
             </div>
-            <div class="col-md-6">
-                <div id="qr-result" class="alert alert-info" style="display: none;">
-                    <h6>Resultado do Scan:</h6>
-                    <div id="qr-result-content"></div>
-                </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body text-center">
+                <div class="h4 mb-0" id="selectedCount">0</div>
+                <small>Selecionadas</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white">
+            <div class="card-body text-center">
+                <div class="h4 mb-0" id="stockCount">{{ instances|selectattr('status', 'equalto', 'em_estoque')|list|length }}</div>
+                <small>Em Estoque</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-white">
+            <div class="card-body text-center">
+                <div class="h4 mb-0" id="sentCount">{{ instances|selectattr('status', 'equalto', 'enviado')|list|length }}</div>
+                <small>Enviadas</small>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Grid de QR Codes -->
-{% if instances %}
-<div class="card">
+<!-- Filtros Avançados -->
+<div class="card mb-4">
     <div class="card-header">
-        <h5 class="card-title mb-0">
-            <i class="bi bi-qr-code"></i> QR Codes Disponíveis ({{ instances|length }} itens)
-        </h5>
+        <h6 class="card-title mb-0">
+            <i class="bi bi-funnel"></i> Filtros e Busca
+        </h6>
     </div>
     <div class="card-body">
         <div class="row">
+            <div class="col-md-4">
+                <label for="searchInput" class="form-label">Buscar</label>
+                <div class="input-group">
+                    <span class="input-group-text">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" class="form-control" id="searchInput"
+                           placeholder="Nome da peça ou código..."
+                           onkeyup="applyFilters()">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label for="statusFilter" class="form-label">Status</label>
+                <select class="form-select" id="statusFilter" onchange="applyFilters()">
+                    <option value="">Todos</option>
+                    <option value="em_estoque">Em Estoque</option>
+                    <option value="enviado">Enviado</option>
+                    <option value="recebido">Recebido</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="partFilter" class="form-label">Peça</label>
+                <select class="form-select" id="partFilter" onchange="applyFilters()">
+                    <option value="">Todas as peças</option>
+                    {% for instance in instances|groupby('part.name') %}
+                    <option value="{{ instance[0] }}">{{ instance[0] }} ({{ instance[1]|list|length }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="sortOrder" class="form-label">Ordenar por</label>
+                <select class="form-select" id="sortOrder" onchange="applyFilters()">
+                    <option value="code_asc">Código (A-Z)</option>
+                    <option value="code_desc">Código (Z-A)</option>
+                    <option value="name_asc">Nome (A-Z)</option>
+                    <option value="name_desc">Nome (Z-A)</option>
+                    <option value="date_new">Mais Recentes</option>
+                    <option value="date_old">Mais Antigas</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if instances %}
+<!-- Grid de QR Codes -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-grid-3x3"></i> Etiquetas Disponíveis
+        </h5>
+        <div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleView('grid')">
+                <i class="bi bi-grid-3x3"></i> Grade
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="toggleView('list')">
+                <i class="bi bi-list-ul"></i> Lista
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="previewPrint()">
+                <i class="bi bi-eye"></i> Preview
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <!-- Visualização em Grade -->
+        <div id="gridView" class="row">
             {% for instance in instances %}
-            <div class="col-md-3 col-sm-6 mb-4">
-                <div class="card h-100">
-                    <div class="card-body text-center">
-                        <!-- QR Code -->
-                        <div class="mb-2">
-                            <img src="data:image/png;base64,{{ instance.qr_code }}"
-                                 alt="QR Code" class="qr-code img-fluid">
-                        </div>
-
-                        <!-- Informações da Peça -->
-                        <h6 class="card-title">{{ instance.part.name }}</h6>
-                        <p class="card-text">
-                            <strong>Código:</strong> {{ instance.unique_code }}<br>
-                            <small class="text-muted">{{ instance.created_at.strftime('%d/%m/%Y') }}</small>
-                        </p>
-
-                        <!-- Status -->
-                        <span class="badge
-                            {% if instance.status == 'em_estoque' %}bg-success
-                            {% elif instance.status == 'enviado' %}bg-info
-                            {% elif instance.status == 'recebido' %}bg-warning
-                            {% endif %}">
-                            {{ instance.status|replace('_', ' ')|title }}
+            <div class="col-lg-2 col-md-3 col-sm-4 col-6 mb-4 qr-item" 
+                 data-id="{{ instance.id }}"
+                 data-part-name="{{ instance.part.name|lower }}"
+                 data-code="{{ instance.unique_code|lower }}"
+                 data-status="{{ instance.status }}"
+                 data-company="{{ instance.company_id }}"
+                 data-created="{{ instance.created_at.isoformat() }}">
+                
+                <div class="card qr-card h-100 position-relative" onclick="toggleSelection({{ instance.id }})">
+                    <!-- Checkbox de seleção -->
+                    <div class="position-absolute top-0 start-0 p-2">
+                        <input type="checkbox" class="form-check-input qr-checkbox" 
+                               id="check_{{ instance.id }}" 
+                               onchange="updateSelectionCount()">
+                    </div>
+                    
+                    <!-- Status badge -->
+                    <div class="position-absolute top-0 end-0 p-2">
+                        <span class="badge bg-{{ 'success' if instance.status == 'em_estoque' else 'warning' if instance.status == 'enviado' else 'info' }}">
+                            <i class="bi bi-{{ 'box' if instance.status == 'em_estoque' else 'truck' if instance.status == 'enviado' else 'check-circle' }}"></i>
                         </span>
+                    </div>
+                    
+                    <div class="card-body text-center p-3">
+                        <!-- QR Code -->
+                        <div class="qr-code-container mb-2">
+                            {% if instance.qr_code %}
+                            <img src="data:image/png;base64,{{ instance.qr_code }}" 
+                                 alt="QR Code" 
+                                 class="img-fluid qr-image"
+                                 style="max-width: 80px; max-height: 80px;">
+                            {% else %}
+                            <div class="qr-placeholder bg-light d-flex align-items-center justify-content-center"
+                                 style="width: 80px; height: 80px; margin: 0 auto;">
+                                <i class="bi bi-qr-code text-muted"></i>
+                            </div>
+                            {% endif %}
+                        </div>
+                        
+                        <!-- Nome da Peça -->
+                        <h6 class="card-title mb-1" style="font-size: 0.85rem; line-height: 1.2;">
+                            {{ instance.part.name }}
+                        </h6>
+                        
+                        <!-- Código Único -->
+                        <p class="card-text mb-1">
+                            <code class="bg-primary text-white px-2 py-1 rounded" style="font-size: 0.8rem;">
+                                {{ instance.unique_code }}
+                            </code>
+                        </p>
+                        
+                        <!-- Empresa -->
+                        <small class="text-muted d-block mb-2">
+                            {{ instance.company.name }}
+                        </small>
+                        
+                        <!-- Data de criação -->
+                        <small class="text-muted">
+                            {{ instance.created_at.strftime('%d/%m/%Y') }}
+                        </small>
                     </div>
                 </div>
             </div>
             {% endfor %}
         </div>
+        
+        <!-- Visualização em Lista -->
+        <div id="listView" class="table-responsive" style="display: none;">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th width="50">
+                            <input type="checkbox" class="form-check-input" id="selectAllList" onchange="toggleAllSelection()">
+                        </th>
+                        <th>QR Code</th>
+                        <th>Peça</th>
+                        <th>Código</th>
+                        <th>Empresa</th>
+                        <th>Status</th>
+                        <th>Criado em</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="qrTableBody">
+                    {% for instance in instances %}
+                    <tr class="qr-item-list" 
+                        data-id="{{ instance.id }}"
+                        data-part-name="{{ instance.part.name|lower }}"
+                        data-code="{{ instance.unique_code|lower }}"
+                        data-status="{{ instance.status }}"
+                        data-company="{{ instance.company_id }}"
+                        data-created="{{ instance.created_at.isoformat() }}">
+                        <td>
+                            <input type="checkbox" class="form-check-input qr-checkbox-list" 
+                                   id="checkList_{{ instance.id }}" 
+                                   onchange="updateSelectionCount()">
+                        </td>
+                        <td>
+                            <div style="width: 40px; height: 40px;">
+                                {% if instance.qr_code %}
+                                <img src="data:image/png;base64,{{ instance.qr_code }}" 
+                                     alt="QR Code" 
+                                     class="img-fluid"
+                                     style="max-width: 40px; max-height: 40px;">
+                                {% else %}
+                                <div class="bg-light d-flex align-items-center justify-content-center h-100">
+                                    <i class="bi bi-qr-code text-muted"></i>
+                                </div>
+                                {% endif %}
+                            </div>
+                        </td>
+                        <td>
+                            <strong>{{ instance.part.name }}</strong>
+                            <br><small class="text-muted">{{ instance.part.category or 'Sem categoria' }}</small>
+                        </td>
+                        <td>
+                            <code class="bg-primary text-white px-2 py-1 rounded">
+                                {{ instance.unique_code }}
+                            </code>
+                        </td>
+                        <td>{{ instance.company.name }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if instance.status == 'em_estoque' else 'warning' if instance.status == 'enviado' else 'info' }}">
+                                <i class="bi bi-{{ 'box' if instance.status == 'em_estoque' else 'truck' if instance.status == 'enviado' else 'check-circle' }}"></i>
+                                {{ instance.status|title }}
+                            </span>
+                        </td>
+                        <td>
+                            {{ instance.created_at.strftime('%d/%m/%Y') }}<br>
+                            <small class="text-muted">{{ instance.created_at.strftime('%H:%M') }}</small>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" onclick="printSingle({{ instance.id }})">
+                                <i class="bi bi-printer"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="showQRDetails({{ instance.id }})">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
+
 {% else %}
+<!-- Estado Vazio -->
 <div class="card">
-    <div class="card-body text-center">
-        <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
-        <h4 class="mt-3">Nenhuma instância encontrada</h4>
-        <p class="text-muted">Adicione peças ao estoque para gerar QR codes.</p>
+    <div class="card-body text-center py-5">
+        <i class="bi bi-qr-code" style="font-size: 4rem; color: #ccc;"></i>
+        <h4 class="mt-3">Nenhuma etiqueta disponível</h4>
+        <p class="text-muted">
+            Não há instâncias de peças para gerar QR codes.
+        </p>
+        <p class="text-muted">
+            Adicione itens ao estoque primeiro para poder gerar etiquetas.
+        </p>
         <a href="{{ url_for('manage_stock') }}" class="btn btn-primary">
-            <i class="bi bi-boxes"></i> Gerenciar Estoque
+            <i class="bi bi-plus-circle"></i> Gerenciar Estoque
         </a>
     </div>
 </div>
 {% endif %}
 
+<!-- Modal de Preview -->
+<div class="modal fade" id="previewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-eye"></i> Preview de Impressão
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="previewContent">
+                <!-- Conteúdo será carregado dinamicamente -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" onclick="confirmPrint()">
+                    <i class="bi bi-printer"></i> Imprimir Selecionadas
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Detalhes -->
+<div class="modal fade" id="detailsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-info-circle"></i> Detalhes da Etiqueta
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="detailsContent">
+                <!-- Conteúdo será carregado dinamicamente -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-primary" onclick="printFromDetails()">
+                    <i class="bi bi-printer"></i> Imprimir Esta
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-let html5QrcodeScanner = null;
+let selectedInstances = new Set();
+let currentView = 'grid';
 
-function startQRScanner() {
-    document.getElementById('qr-scanner').style.display = 'block';
-
-    html5QrcodeScanner = new Html5QrcodeScanner(
-        "qr-reader",
-        { fps: 10, qrbox: {width: 250, height: 250} },
-        false
-    );
-
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+// Seleção de instâncias
+function toggleSelection(instanceId) {
+    const checkbox = document.getElementById(`check_${instanceId}`) || document.getElementById(`checkList_${instanceId}`);
+    checkbox.checked = !checkbox.checked;
+    updateSelectionCount();
 }
 
-function stopQRScanner() {
-    if (html5QrcodeScanner) {
-        html5QrcodeScanner.clear();
-        html5QrcodeScanner = null;
-    }
-    document.getElementById('qr-scanner').style.display = 'none';
-    document.getElementById('qr-result').style.display = 'none';
+function selectAll() {
+    const visibleItems = document.querySelectorAll('.qr-item:not([style*="display: none"]), .qr-item-list:not([style*="display: none"])');
+    visibleItems.forEach(item => {
+        const id = item.getAttribute('data-id');
+        const checkbox = document.getElementById(`check_${id}`) || document.getElementById(`checkList_${id}`);
+        if (checkbox) checkbox.checked = true;
+    });
+    updateSelectionCount();
 }
 
-function onScanSuccess(decodedText, decodedResult) {
-    // Processar resultado do scan
-    fetch('/api/qr/scan', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ qr_content: decodedText })
-    })
-    .then(response => response.json())
-    .then(data => {
-        const resultDiv = document.getElementById('qr-result');
-        const contentDiv = document.getElementById('qr-result-content');
+function selectNone() {
+    document.querySelectorAll('.qr-checkbox, .qr-checkbox-list').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectionCount();
+}
 
-        if (data.success) {
-            resultDiv.className = 'alert alert-success';
-            contentDiv.innerHTML = `
-                <strong>Peça:</strong> ${data.data.part_name}<br>
-                <strong>Código:</strong> ${data.data.unique_code}<br>
-                <strong>Status:</strong> ${data.data.status}<br>
-                <strong>Empresa:</strong> ${data.data.company}<br>
-                <strong>Criado em:</strong> ${data.data.created_at}
-            `;
-        } else {
-            resultDiv.className = 'alert alert-danger';
-            contentDiv.innerHTML = `<strong>Erro:</strong> ${data.message}`;
-        }
+function toggleAllSelection() {
+    const mainCheckbox = document.getElementById('selectAllList');
+    const visibleCheckboxes = document.querySelectorAll('.qr-item-list:not([style*="display: none"]) .qr-checkbox-list');
+    
+    visibleCheckboxes.forEach(checkbox => {
+        checkbox.checked = mainCheckbox.checked;
+    });
+    updateSelectionCount();
+}
 
-        resultDiv.style.display = 'block';
-    })
-    .catch(error => {
-        console.error('Erro:', error);
-        const resultDiv = document.getElementById('qr-result');
-        const contentDiv = document.getElementById('qr-result-content');
-
-        resultDiv.className = 'alert alert-danger';
-        contentDiv.innerHTML = '<strong>Erro:</strong> Falha na comunicação com o servidor';
-        resultDiv.style.display = 'block';
+function updateSelectionCount() {
+    const selectedCount = document.querySelectorAll('.qr-checkbox:checked, .qr-checkbox-list:checked').length;
+    document.getElementById('selectedCount').textContent = selectedCount;
+    
+    // Habilitar/desabilitar botão de impressão
+    const printButton = document.getElementById('printButton');
+    printButton.disabled = selectedCount === 0;
+    
+    // Atualizar conjunto de selecionados
+    selectedInstances.clear();
+    document.querySelectorAll('.qr-checkbox:checked, .qr-checkbox-list:checked').forEach(checkbox => {
+        const id = checkbox.id.replace('check_', '').replace('checkList_', '');
+        selectedInstances.add(id);
     });
 }
 
-function onScanFailure(error) {
-    // Handle scan failure, usually better to ignore and keep scanning.
-    // For example:
-    console.warn(`Code scan error = ${error}`);
+// Filtros
+function applyFilters() {
+    const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.getElementById('statusFilter').value;
+    const partFilter = document.getElementById('partFilter').value.toLowerCase();
+    const sortOrder = document.getElementById('sortOrder').value;
+    
+    let items = currentView === 'grid' ? 
+        document.querySelectorAll('.qr-item') : 
+        document.querySelectorAll('.qr-item-list');
+    
+    let visibleItems = [];
+    
+    items.forEach(item => {
+        const partName = item.getAttribute('data-part-name');
+        const code = item.getAttribute('data-code');
+        const status = item.getAttribute('data-status');
+        
+        let show = true;
+        
+        // Filtro de busca
+        if (searchTerm && !partName.includes(searchTerm) && !code.includes(searchTerm)) {
+            show = false;
+        }
+        
+        // Filtro de status
+        if (statusFilter && status !== statusFilter) {
+            show = false;
+        }
+        
+        // Filtro de peça
+        if (partFilter && !partName.includes(partFilter)) {
+            show = false;
+        }
+        
+        item.style.display = show ? '' : 'none';
+        
+        if (show) {
+            visibleItems.push(item);
+        }
+    });
+    
+    // Aplicar ordenação
+    sortItems(visibleItems, sortOrder);
+    
+    // Atualizar contadores
+    updateCounters();
 }
+
+function sortItems(items, order) {
+    const container = currentView === 'grid' ? 
+        document.querySelector('#gridView') : 
+        document.querySelector('#qrTableBody');
+    
+    items.sort((a, b) => {
+        const aPartName = a.getAttribute('data-part-name');
+        const bPartName = b.getAttribute('data-part-name');
+        const aCode = a.getAttribute('data-code');
+        const bCode = b.getAttribute('data-code');
+        const aDate = new Date(a.getAttribute('data-created'));
+        const bDate = new Date(b.getAttribute('data-created'));
+        
+        switch(order) {
+            case 'code_desc':
+                return bCode.localeCompare(aCode);
+            case 'name_asc':
+                return aPartName.localeCompare(bPartName);
+            case 'name_desc':
+                return bPartName.localeCompare(aPartName);
+            case 'date_new':
+                return bDate - aDate;
+            case 'date_old':
+                return aDate - bDate;
+            default: // code_asc
+                return aCode.localeCompare(bCode);
+        }
+    });
+    
+    // Reordenar elementos no DOM
+    items.forEach(item => container.appendChild(item));
+}
+
+function updateCounters() {
+    const visible = document.querySelectorAll(currentView === 'grid' ? 
+        '.qr-item:not([style*="display: none"])' : 
+        '.qr-item-list:not([style*="display: none"])').length;
+    document.getElementById('totalCount').textContent = visible;
+}
+
+function filterByCompany() {
+    const companyId = document.getElementById('companyFilter').value;
+    const items = currentView === 'grid' ? 
+        document.querySelectorAll('.qr-item') : 
+        document.querySelectorAll('.qr-item-list');
+    
+    items.forEach(item => {
+        const itemCompany = item.getAttribute('data-company');
+        item.style.display = (!companyId || itemCompany === companyId) ? '' : 'none';
+    });
+    
+    updateCounters();
+}
+
+// Visualizações
+function toggleView(viewType) {
+    const gridView = document.getElementById('gridView');
+    const listView = document.getElementById('listView');
+    
+    if (viewType === 'grid') {
+        gridView.style.display = '';
+        listView.style.display = 'none';
+        currentView = 'grid';
+    } else {
+        gridView.style.display = 'none';
+        listView.style.display = '';
+        currentView = 'list';
+    }
+    
+    // Sincronizar seleções entre as views
+    syncSelections();
+}
+
+function syncSelections() {
+    selectedInstances.forEach(id => {
+        const gridCheck = document.getElementById(`check_${id}`);
+        const listCheck = document.getElementById(`checkList_${id}`);
+        
+        if (gridCheck) gridCheck.checked = true;
+        if (listCheck) listCheck.checked = true;
+    });
+}
+
+// Impressão
+function printSelected(size) {
+    if (selectedInstances.size === 0) {
+        alert('Selecione pelo menos uma etiqueta para imprimir!');
+        return;
+    }
+    
+    const instanceIds = Array.from(selectedInstances).join(',');
+    const url = `/qrcodes/print?instances=${instanceIds}&size=${size}`;
+    window.open(url, '_blank');
+}
+
+function printSingle(instanceId) {
+    const url = `/qrcodes/print?instances=${instanceId}&size=medium`;
+    window.open(url, '_blank');
+}
+
+function previewPrint() {
+    if (selectedInstances.size === 0) {
+        alert('Selecione pelo menos uma etiqueta para visualizar!');
+        return;
+    }
+    
+    // Gerar preview das etiquetas selecionadas
+    const previewContent = document.getElementById('previewContent');
+    previewContent.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+    
+    // Simular carregamento
+    setTimeout(() => {
+        let html = '<div class="row">';
+        selectedInstances.forEach(id => {
+            const item = document.querySelector(`[data-id="${id}"]`);
+            const partName = item.querySelector('h6, strong').textContent;
+            const code = item.querySelector('code').textContent;
+            const qrImg = item.querySelector('img');
+            
+            html += `
+                <div class="col-4 mb-3">
+                    <div class="border p-2 text-center">
+                        ${qrImg ? qrImg.outerHTML : '<div class="qr-placeholder">QR</div>'}
+                        <div style="font-size: 0.7rem; line-height: 1.1;">
+                            <strong>${partName}</strong><br>
+                            <code style="font-size: 0.6rem;">${code}</code>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+        html += '</div>';
+        
+        previewContent.innerHTML = html;
+    }, 500);
+    
+    new bootstrap.Modal(document.getElementById('previewModal')).show();
+}
+
+function confirmPrint() {
+    printSelected('medium');
+    bootstrap.Modal.getInstance(document.getElementById('previewModal')).hide();
+}
+
+function showQRDetails(instanceId) {
+    // Carregar detalhes da instância
+    const item = document.querySelector(`[data-id="${instanceId}"]`);
+    // Implementar carregamento de detalhes via AJAX
+    
+    new bootstrap.Modal(document.getElementById('detailsModal')).show();
+}
+
+function printFromDetails() {
+    // Implementar impressão da etiqueta atual
+    bootstrap.Modal.getInstance(document.getElementById('detailsModal')).hide();
+}
+
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    updateSelectionCount();
+    
+    // Auto-aplicar filtros conforme o usuário digita
+    document.getElementById('searchInput').addEventListener('input', applyFilters);
+});
 </script>
+
+<style>
+.qr-card {
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.qr-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.qr-card.selected {
+    border-color: #0d6efd;
+    background-color: #f8f9ff;
+}
+
+.qr-image {
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+}
+
+.qr-placeholder {
+    border: 2px dashed #dee2e6;
+    border-radius: 4px;
+    font-size: 1.5rem;
+}
+
+.qr-code-container {
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.form-check-input:checked + .qr-card {
+    border-color: #0d6efd !important;
+    background-color: #f8f9ff !important;
+}
+
+@media (max-width: 768px) {
+    .col-6 {
+        max-width: 50%;
+    }
+    
+    .qr-card .card-body {
+        padding: 0.75rem;
+    }
+    
+    .qr-image {
+        max-width: 60px !important;
+        max-height: 60px !important;
+    }
+}
+
+@media print {
+    .btn, .card-header, .modal, .dropdown-menu {
+        display: none !important;
+    }
+    
+    .qr-card {
+        border: 1px solid #000 !important;
+        break-inside: avoid;
+        margin-bottom: 10px;
+    }
+}
+</style>
+
 {% endblock %}
-
-
-

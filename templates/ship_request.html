@@ -1,179 +1,548 @@
+<!-- ship_request.html - Template corrigido para envio de peças -->
 {% extends "base.html" %}
 
-{% block title %}Enviar Peças{% endblock %}
+{% block title %}Enviar Peças - Solicitação #{{ request.id }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .instance-checkbox {
+        margin-right: 8px;
+    }
+    .custom-control-label {
+        font-size: 0.9em;
+        cursor: pointer;
+    }
+    .card-header h6 {
+        color: #495057;
+    }
+    .temp-alert {
+        margin-bottom: 1rem;
+    }
+    .loading-spinner {
+        min-height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .instance-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        margin-bottom: 1rem;
+    }
+    .summary-card {
+        background-color: #f8f9fa;
+        border-left: 4px solid #007bff;
+    }
+</style>
+{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Enviar Peças - Solicitação #{{ request.id }}</h1>
-    <div class="btn-toolbar mb-2 mb-md-0">
-        <a href="{{ url_for('pending_requests') }}" class="btn btn-outline-secondary">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
+<div class="container-fluid" data-request-id="{{ request.id }}">
+    <!-- Cabeçalho -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h2><i class="fas fa-shipping-fast"></i> Enviar Peças</h2>
+                    <p class="text-muted mb-0">Solicitação #{{ request.id }} - {{ request.requester.username }}</p>
+                </div>
+                <div>
+                    <a href="{{ url_for('pending_requests') }}" class="btn btn-secondary">
+                        <i class="fas fa-arrow-left"></i> Voltar
+                    </a>
+                </div>
+            </div>
+        </div>
     </div>
-</div>
 
-<!-- Informações da Solicitação -->
-<div class="card mb-4">
-    <div class="card-header">
-        <h5 class="card-title mb-0">Informações da Solicitação</h5>
+    <!-- Informações da Solicitação -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card summary-card">
+                <div class="card-body">
+                    <h6><i class="fas fa-info-circle"></i> Detalhes da Solicitação</h6>
+                    <p><strong>Solicitante:</strong> {{ request.requester.username }}</p>
+                    <p><strong>Empresa:</strong> {{ request.company.name }}</p>
+                    <p><strong>Local:</strong> {{ request.location.name }}</p>
+                    {% if request.equipment %}
+                    <p><strong>Equipamento:</strong> {{ request.equipment.name }}</p>
+                    {% endif %}
+                    <p><strong>Data:</strong> {{ request.created_at|datetime }}</p>
+                    {% if request.notes %}
+                    <p><strong>Observações:</strong><br>{{ request.notes }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6><i class="fas fa-clipboard-list"></i> Resumo dos Itens</h6>
+                    {% for item in request.items %}
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span>{{ item.part.name }}</span>
+                        <span class="badge badge-info">
+                            {{ item.quantity_requested - item.quantity_sent }} pendente{{ 's' if (item.quantity_requested - item.quantity_sent) != 1 else '' }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="card-body">
+
+    <!-- Formulário de Envio -->
+    <form id="shipping-form" method="POST">
         <div class="row">
-            <div class="col-md-6">
-                <p><strong>Solicitante:</strong> {{ request.requester.username }}</p>
-                <p><strong>Local de Destino:</strong> {{ request.location.name }}</p>
-                {% if request.equipment %}
-                <p><strong>Equipamento:</strong> {{ request.equipment.name }}</p>
-                {% endif %}
-            </div>
-            <div class="col-md-6">
-                <p><strong>Data da Solicitação:</strong> {{ request.created_at.strftime('%d/%m/%Y %H:%M') }}</p>
-                <p><strong>Status:</strong>
-                    <span class="badge bg-warning">{{ request.status|title }}</span>
-                </p>
-                {% if request.notes %}
-                <p><strong>Observações:</strong> {{ request.notes }}</p>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Formulário de Envio -->
-<form method="POST" id="shipment-form">
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">Dados do Envio</h5>
-        </div>
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="shipping_method" class="form-label">Método de Envio *</label>
-                        <input type="text" class="form-control" id="shipping_method" name="shipping_method"
-                               placeholder="Ex: Transportadora ABC, Correios, Entrega própria" required>
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-boxes"></i> Itens para Envio</h5>
                     </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="mb-3">
-                        <label for="tracking_number" class="form-label">Número de Rastreamento</label>
-                        <input type="text" class="form-control" id="tracking_number" name="tracking_number"
-                               placeholder="Código de rastreamento (opcional)">
-                    </div>
-                </div>
-            </div>
-            <div class="mb-3">
-                <label for="notes" class="form-label">Observações do Envio</label>
-                <textarea class="form-control" id="notes" name="notes" rows="3"
-                          placeholder="Informações adicionais sobre o envio"></textarea>
-            </div>
-        </div>
-    </div>
-
-    <!-- Itens para Envio -->
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="card-title mb-0">Selecionar Itens para Envio</h5>
-        </div>
-        <div class="card-body">
-            {% for item in request.items %}
-            <div class="border rounded p-3 mb-3">
-                <div class="row align-items-center">
-                    <div class="col-md-4">
-                        <h6>{{ item.part.name }}</h6>
-                        <small class="text-muted">{{ item.part.part_number or 'S/N' }}</small>
-                    </div>
-                    <div class="col-md-2">
-                        <small class="text-muted">Solicitado:</small><br>
-                        <strong>{{ item.quantity_requested }}</strong>
-                    </div>
-                    <div class="col-md-2">
-                        <small class="text-muted">Já Enviado:</small><br>
-                        <strong>{{ item.quantity_sent }}</strong>
-                    </div>
-                    <div class="col-md-4">
-                        {% set available = available_instances.get(item.id, []) %}
-                        {% if available %}
-                        <label class="form-label">Selecionar Instâncias:</label>
-                        <div class="form-check-container" style="max-height: 150px; overflow-y: auto;">
-                            {% for instance in available %}
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox"
-                                       name="instances_{{ item.id }}" value="{{ instance.id }}"
-                                       id="instance_{{ instance.id }}">
-                                <label class="form-check-label" for="instance_{{ instance.id }}">
-                                    {{ instance.unique_code }}
-                                    <small class="text-muted d-block">{{ instance.created_at.strftime('%d/%m/%Y') }}</small>
-                                </label>
+                    <div class="card-body">
+                        {% for item in request.items %}
+                        {% set quantity_needed = item.quantity_requested - item.quantity_sent %}
+                        {% if quantity_needed > 0 %}
+                        <div class="instance-card">
+                            <div class="card-header bg-light">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">
+                                        <i class="fas fa-cog"></i>
+                                        {{ item.part.name }}
+                                        {% if item.part.part_number %}
+                                        <small class="text-muted">({{ item.part.part_number }})</small>
+                                        {% endif %}
+                                    </h6>
+                                    <div class="d-flex align-items-center">
+                                        <span class="badge badge-warning mr-2">
+                                            Pendente: {{ quantity_needed }}
+                                        </span>
+                                        <button type="button"
+                                                class="btn btn-sm btn-outline-primary"
+                                                onclick="loadPartInstances({{ item.part.id }}, {{ item.id }}, {{ quantity_needed }})">
+                                            <i class="fas fa-sync-alt"></i> Carregar Instâncias
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            {% endfor %}
-                        </div>
-                        <small class="text-info">
-                            <i class="bi bi-info-circle"></i>
-                            {{ available|length }} instâncias disponíveis
-                        </small>
-                        {% else %}
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i>
-                            Nenhuma instância disponível em estoque
+                            <div class="card-body">
+                                <div id="instances-container-{{ item.id }}">
+                                    <div class="text-center text-muted">
+                                        <i class="fas fa-mouse-pointer"></i>
+                                        Clique em "Carregar Instâncias" para ver as peças disponíveis
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         {% endif %}
+                        {% endfor %}
                     </div>
                 </div>
             </div>
-            {% endfor %}
+        </div>
+
+        <!-- Informações de Envio -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-truck"></i> Informações de Envio</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="shipping_method">
+                                        <i class="fas fa-shipping-fast"></i> Método de Envio *
+                                    </label>
+                                    <select id="shipping_method" name="shipping_method" class="form-control" required>
+                                        <option value="">Selecione o método...</option>
+                                        <option value="correios_pac">Correios PAC</option>
+                                        <option value="correios_sedex">Correios SEDEX</option>
+                                        <option value="transportadora">Transportadora</option>
+                                        <option value="entrega_pessoa">Entrega em Pessoa</option>
+                                        <option value="retirada_local">Retirada no Local</option>
+                                        <option value="outro">Outro</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-group">
+                                    <label for="tracking_number">
+                                        <i class="fas fa-barcode"></i> Código de Rastreamento
+                                    </label>
+                                    <input type="text"
+                                           id="tracking_number"
+                                           name="tracking_number"
+                                           class="form-control"
+                                           placeholder="Ex: AA123456789BR">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="notes">
+                                <i class="fas fa-sticky-note"></i> Observações do Envio
+                            </label>
+                            <textarea id="notes"
+                                      name="notes"
+                                      class="form-control"
+                                      rows="3"
+                                      placeholder="Informações adicionais sobre o envio..."></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botões de Ação -->
+        <div class="row mt-4 mb-5">
+            <div class="col-12">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <a href="{{ url_for('pending_requests') }}" class="btn btn-secondary">
+                            <i class="fas fa-times"></i> Cancelar
+                        </a>
+                        <button type="button" class="btn btn-info ml-2" onclick="debugInstances()">
+                            <i class="fas fa-bug"></i> Debug
+                        </button>
+                    </div>
+                    <div>
+                        <button type="button"
+                                class="btn btn-outline-primary mr-2"
+                                onclick="loadAllRequestInstances({{ request.id }})">
+                            <i class="fas fa-sync-alt"></i> Recarregar Todas
+                        </button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="fas fa-paper-plane"></i> Confirmar Envio
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Modal de Confirmação -->
+<div class="modal fade" id="confirmModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exclamation-triangle text-warning"></i>
+                    Confirmar Envio
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>Você está prestes a enviar as instâncias selecionadas.</p>
+                <p><strong>Esta ação não pode ser desfeita.</strong></p>
+                <div id="confirmation-summary"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    Cancelar
+                </button>
+                <button type="button" class="btn btn-success" id="final-confirm-btn">
+                    <i class="fas fa-check"></i> Confirmar Envio
+                </button>
+            </div>
         </div>
     </div>
+</div>
+{% endblock %}
 
-    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-        <button type="button" class="btn btn-outline-secondary" onclick="history.back()">
-            Cancelar
-        </button>
-        <button type="submit" class="btn btn-primary" onclick="return confirmShipment()">
-            <i class="bi bi-send"></i> Confirmar Envio
-        </button>
-    </div>
-</form>
-
+{% block extra_js %}
 <script>
-function confirmShipment() {
-    const selectedInstances = document.querySelectorAll('input[type="checkbox"]:checked');
+// ============= JAVASCRIPT INLINE PARA O SISTEMA DE ENVIO =============
 
-    if (selectedInstances.length === 0) {
-        alert('Selecione pelo menos uma instância para enviar.');
-        return false;
+// Função para carregar instâncias disponíveis de uma peça
+function loadPartInstances(partId, requestItemId, maxQuantity) {
+    console.log(`Carregando instâncias para peça ${partId}, item ${requestItemId}, max: ${maxQuantity}`);
+
+    // Mostrar loading
+    const container = document.getElementById(`instances-container-${requestItemId}`);
+    if (container) {
+        container.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></div>';
     }
 
-    const count = selectedInstances.length;
-    return confirm(`Confirmar o envio de ${count} item(ns)?`);
+    // Fazer requisição para a API
+    fetch(`/api/parts/${partId}/instances?company_id={{ current_user.company_id if current_user.role != 'master' else request.company_id }}`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                displayPartInstances(data.instances, requestItemId, maxQuantity);
+            } else {
+                throw new Error(data.message || 'Erro desconhecido');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar instâncias:', error);
+            if (container) {
+                container.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Erro ao carregar instâncias:</strong> ${error.message}
+                        <br><small>Verifique se existem peças em estoque e se as instâncias foram criadas corretamente.</small>
+                        <br><button type="button" class="btn btn-sm btn-outline-warning mt-2" onclick="loadPartInstances(${partId}, ${requestItemId}, ${maxQuantity})">
+                            <i class="fas fa-redo"></i> Tentar Novamente
+                        </button>
+                    </div>
+                `;
+            }
+        });
 }
 
-// Adicionar botões de seleção rápida
-document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('.form-check-container').forEach(container => {
-        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+// Função para exibir as instâncias disponíveis
+function displayPartInstances(instances, requestItemId, maxQuantity) {
+    const container = document.getElementById(`instances-container-${requestItemId}`);
 
-        if (checkboxes.length > 1) {
-            const selectAllBtn = document.createElement('button');
-            selectAllBtn.type = 'button';
-            selectAllBtn.className = 'btn btn-sm btn-outline-primary me-2 mb-2';
-            selectAllBtn.innerHTML = '<i class="bi bi-check-all"></i> Todos';
-            selectAllBtn.onclick = function() {
-                checkboxes.forEach(cb => cb.checked = true);
-            };
+    if (!container) {
+        console.error(`Container instances-container-${requestItemId} não encontrado`);
+        return;
+    }
 
-            const selectNoneBtn = document.createElement('button');
-            selectNoneBtn.type = 'button';
-            selectNoneBtn.className = 'btn btn-sm btn-outline-secondary mb-2';
-            selectNoneBtn.innerHTML = '<i class="bi bi-x"></i> Nenhum';
-            selectNoneBtn.onclick = function() {
-                checkboxes.forEach(cb => cb.checked = false);
-            };
+    if (instances.length === 0) {
+        container.innerHTML = `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i>
+                <strong>Nenhuma instância disponível em estoque.</strong>
+                <br><small>Verifique se há peças cadastradas no estoque desta empresa.</small>
+            </div>
+        `;
+        return;
+    }
 
-            container.parentNode.insertBefore(selectAllBtn, container);
-            container.parentNode.insertBefore(selectNoneBtn, container);
-        }
+    // Limitar instâncias à quantidade máxima necessária
+    const limitedInstances = instances.slice(0, maxQuantity);
+
+    let html = `
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">
+                    <i class="fas fa-boxes"></i>
+                    Instâncias Disponíveis (${limitedInstances.length} de ${instances.length})
+                </h6>
+                <div class="btn-group btn-group-sm">
+                    <button type="button" class="btn btn-outline-primary" onclick="selectAllInstances(${requestItemId}, true)">
+                        <i class="fas fa-check-square"></i> Todas
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary" onclick="selectAllInstances(${requestItemId}, false)">
+                        <i class="fas fa-square"></i> Nenhuma
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="row">
+    `;
+
+    limitedInstances.forEach((instance, index) => {
+        const warrantyInfo = instance.warranty_expires ?
+            `<small class="text-muted"><br><i class="fas fa-shield-alt"></i> Garantia: ${instance.warranty_expires}</small>` : '';
+
+        html += `
+            <div class="col-md-6 col-lg-4 mb-3">
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox"
+                           class="custom-control-input instance-checkbox"
+                           id="instance_${requestItemId}_${instance.id}"
+                           name="instances_${requestItemId}"
+                           value="${instance.id}"
+                           onchange="updateSelectedCount(${requestItemId})">
+                    <label class="custom-control-label" for="instance_${requestItemId}_${instance.id}">
+                        <strong class="text-primary">${instance.unique_code}</strong>
+                        <small class="text-muted d-block">
+                            <i class="fas fa-calendar"></i> ${instance.created_at}
+                        </small>
+                        ${warrantyInfo}
+                    </label>
+                </div>
+            </div>
+        `;
     });
+
+    html += `
+                </div>
+                <div class="mt-3 text-center">
+                    <span class="badge badge-info" id="selected-count-${requestItemId}">0 selecionadas</span>
+                    <span class="text-muted"> / máximo ${maxQuantity}</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    container.innerHTML = html;
+}
+
+// Função para selecionar/desmarcar todas as instâncias
+function selectAllInstances(requestItemId, selectAll) {
+    const checkboxes = document.querySelectorAll(`input[name="instances_${requestItemId}"]`);
+    checkboxes.forEach(checkbox => {
+        checkbox.checked = selectAll;
+    });
+    updateSelectedCount(requestItemId);
+}
+
+// Função para atualizar contador de selecionadas
+function updateSelectedCount(requestItemId) {
+    const checkboxes = document.querySelectorAll(`input[name="instances_${requestItemId}"]:checked`);
+    const counter = document.getElementById(`selected-count-${requestItemId}`);
+
+    if (counter) {
+        const count = checkboxes.length;
+        counter.textContent = `${count} selecionada${count !== 1 ? 's' : ''}`;
+        counter.className = count > 0 ? 'badge badge-success' : 'badge badge-info';
+    }
+}
+
+// Função para carregar todas as instâncias da solicitação
+function loadAllRequestInstances(requestId) {
+    console.log(`Carregando todas as instâncias para solicitação ${requestId}`);
+
+    // Mostrar loading em todos os containers
+    const containers = document.querySelectorAll('[id^="instances-container-"]');
+    containers.forEach(container => {
+        container.innerHTML = '<div class="loading-spinner"><i class="fas fa-spinner fa-spin fa-2x text-primary"></i></div>';
+    });
+
+    fetch(`/api/requests/${requestId}/available-instances`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            if (data.success) {
+                displayAllRequestInstances(data.available_instances);
+                showSuccessMessage('Instâncias carregadas com sucesso!');
+            } else {
+                throw new Error(data.message || 'Erro desconhecido');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar instâncias da solicitação:', error);
+            showErrorMessage(`Erro ao carregar instâncias: ${error.message}`);
+        });
+}
+
+// Função para exibir todas as instâncias da solicitação
+function displayAllRequestInstances(availableInstances) {
+    Object.keys(availableInstances).forEach(itemId => {
+        const itemData = availableInstances[itemId];
+        displayPartInstances(itemData.instances, itemId, itemData.quantity_needed);
+    });
+}
+
+// Função para validar formulário de envio
+function validateShippingForm() {
+    let isValid = true;
+    let errorMessages = [];
+
+    // Verificar se pelo menos uma instância foi selecionada
+    const allCheckboxes = document.querySelectorAll('input[name^="instances_"]:checked');
+    if (allCheckboxes.length === 0) {
+        errorMessages.push('Selecione pelo menos uma instância para enviar.');
+        isValid = false;
+    }
+
+    // Verificar método de envio
+    const shippingMethod = document.getElementById('shipping_method');
+    if (shippingMethod && !shippingMethod.value.trim()) {
+        errorMessages.push('Selecione o método de envio.');
+        isValid = false;
+    }
+
+    // Mostrar erros se houver
+    if (!isValid) {
+        showErrorMessage(errorMessages.join('<br>'));
+    }
+
+    return isValid;
+}
+
+// Função para mostrar mensagens de erro
+function showErrorMessage(message) {
+    const existingAlerts = document.querySelectorAll('.alert-danger.temp-alert');
+    existingAlerts.forEach(alert => alert.remove());
+
+    const alertHtml = `
+        <div class="alert alert-danger alert-dismissible fade show temp-alert" role="alert">
+            <i class="fas fa-exclamation-triangle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert">
+                <span>&times;</span>
+            </button>
+        </div>
+    `;
+
+    const container = document.querySelector('.container-fluid');
+    container.insertAdjacentHTML('afterbegin', alertHtml);
+    window.scrollTo(0, 0);
+}
+
+// Função para mostrar mensagens de sucesso
+function showSuccessMessage(message) {
+    const existingAlerts = document.querySelectorAll('.alert-success.temp-alert');
+    existingAlerts.forEach(alert => alert.remove());
+
+    const alertHtml = `
+        <div class="alert alert-success alert-dismissible fade show temp-alert" role="alert">
+            <i class="fas fa-check-circle"></i>
+            ${message}
+            <button type="button" class="close" data-dismiss="alert">
+                <span>&times;</span>
+            </button>
+        </div>
+    `;
+
+    const container = document.querySelector('.container-fluid');
+    container.insertAdjacentHTML('afterbegin', alertHtml);
+    window.scrollTo(0, 0);
+}
+
+// Função utilitária para debug
+function debugInstances() {
+    console.log('=== DEBUG INSTÂNCIAS ===');
+    const allCheckboxes = document.querySelectorAll('input[name^="instances_"]');
+    console.log(`Total de checkboxes: ${allCheckboxes.length}`);
+
+    const selectedCheckboxes = document.querySelectorAll('input[name^="instances_"]:checked');
+    console.log(`Instâncias selecionadas: ${selectedCheckboxes.length}`);
+
+    selectedCheckboxes.forEach(cb => {
+        console.log(`- ${cb.name}: ${cb.value}`);
+    });
+
+    // Mostrar no alert também
+    alert(`Debug: ${allCheckboxes.length} checkboxes total, ${selectedCheckboxes.length} selecionadas. Veja o console para detalhes.`);
+}
+
+// Inicialização quando a página carrega
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Sistema de envio inicializado');
+
+    // Adicionar validação ao formulário
+    const shippingForm = document.getElementById('shipping-form');
+    if (shippingForm) {
+        shippingForm.addEventListener('submit', function(e) {
+            if (!validateShippingForm()) {
+                e.preventDefault();
+                return false;
+            }
+        });
+    }
+
+    // Auto-carregar instâncias
+    setTimeout(() => {
+        loadAllRequestInstances({{ request.id }});
+    }, 1000);
 });
 </script>
 {% endblock %}

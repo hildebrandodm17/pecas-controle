@@ -256,8 +256,21 @@ def generate_base_code(part_name):
 def generate_instance_code(part_id):
     """Gera código incremental para instância da peça (ex: MON17001)"""
     part = Part.query.get(part_id)
-    if not part or not part.base_code:
+    print(f"DEBUG: Buscando peça ID {part_id}")  # DEBUG
+
+    if not part:
+        print(f"DEBUG: ERRO - Peça ID {part_id} não encontrada!")  # DEBUG
         return None
+
+    if not part.base_code:
+        print(f"DEBUG: ERRO - Peça '{part.name}' não tem base_code!")  # DEBUG
+        print(f"DEBUG: base_code atual: {repr(part.base_code)}")  # DEBUG
+        # Tentar gerar base_code se não existir
+        part.base_code = generate_base_code(part.name)
+        db.session.commit()
+        print(f"DEBUG: base_code gerado automaticamente: {part.base_code}")  # DEBUG
+
+    print(f"DEBUG: Peça encontrada: '{part.name}' | base_code: '{part.base_code}'")  # DEBUG
 
     # Buscar último número usado para esta peça
     last_instance = PartInstance.query.filter_by(part_id=part_id) \
@@ -265,24 +278,36 @@ def generate_instance_code(part_id):
         .first()
 
     if last_instance:
+        print(f"DEBUG: Última instância: {last_instance.unique_code}")  # DEBUG
         # Extrair número do último código (ex: MON17005 → 5)
         try:
             last_number = int(last_instance.unique_code[-3:])
             next_number = last_number + 1
-        except (ValueError, IndexError):
-            # Se não conseguir extrair, começar do 1
+            print(f"DEBUG: Último número: {last_number}, próximo: {next_number}")  # DEBUG
+        except (ValueError, IndexError) as e:
+            print(f"DEBUG: Erro ao extrair número: {e}, usando 1")  # DEBUG
             next_number = 1
     else:
         next_number = 1
+        print(f"DEBUG: Primeira instância, usando número: {next_number}")  # DEBUG
 
     # Gerar código: BASE + número com 3 dígitos
     instance_code = f"{part.base_code}{next_number:03d}"
+    print(f"DEBUG: Código gerado: {instance_code}")  # DEBUG
 
     # Garantir que não existe (segurança extra)
+    attempts = 0
     while PartInstance.query.filter_by(unique_code=instance_code).first():
+        attempts += 1
         next_number += 1
         instance_code = f"{part.base_code}{next_number:03d}"
+        print(f"DEBUG: Código já existe, tentativa {attempts}: {instance_code}")  # DEBUG
 
+        if attempts > 100:  # Evitar loop infinito
+            print(f"DEBUG: ERRO - Muitas tentativas, abortando!")  # DEBUG
+            return None
+
+    print(f"DEBUG: Código final: {instance_code}")  # DEBUG
     return instance_code
 
 def generate_qr_code(data):
@@ -667,14 +692,24 @@ def new_part():
         name = request.form['name']
         description = request.form['description']
         part_number = request.form['part_number']
-        base_code = base_code,
         category = request.form['category']
         unit_measure = request.form['unit_measure']
+
+        # Verificar se já existe peça com mesmo nome
+        existing_part = Part.query.filter_by(name=name).first()
+        if existing_part:
+            flash('Já existe uma peça com este nome!', 'error')
+            return render_template('part_form.html')
+
+        # Gerar código base automaticamente
+        base_code = generate_base_code(name)
+        print(f"DEBUG: Código gerado: {base_code} para peça: {name}")  # DEBUG
 
         part = Part(
             name=name,
             description=description,
             part_number=part_number,
+            base_code=base_code,  # ← CRÍTICO: incluir esta linha
             category=category,
             unit_measure=unit_measure
         )
@@ -682,11 +717,12 @@ def new_part():
         db.session.add(part)
         db.session.commit()
 
-        flash('Peça cadastrada com sucesso!', 'success')
+        print(f"DEBUG: Peça salva com ID: {part.id} e base_code: {part.base_code}")  # DEBUG
+
+        flash(f'Peça "{name}" cadastrada com código {base_code}!', 'success')
         return redirect(url_for('manage_parts'))
 
     return render_template('part_form.html')
-
 
 # ============= ROTAS ADICIONAIS PARA PEÇAS =============
 # Adicionar essas rotas no arquivo app.py após a função new_part()
@@ -1121,12 +1157,28 @@ def new_request():
         part_ids = request.form.getlist('part_ids')
         quantities = request.form.getlist('quantities')
 
+        # ✅ CORREÇÃO: Determinar company_id corretamente
+        if current_user.role == 'master':
+            # Master precisa escolher a empresa
+            company_id = request.form.get('company_id')
+            if not company_id:
+                flash('Masters devem selecionar uma empresa para a solicitação!', 'error')
+                return redirect(url_for('new_request'))
+        else:
+            # Outros usuários usam sua empresa
+            company_id = current_user.company_id
+            if not company_id:
+                flash('Seu usuário não possui empresa associada. Contate o administrador!', 'error')
+                return redirect(url_for('dashboard'))
+
+        print(f"DEBUG: Criando solicitação - User: {current_user.username}, Company: {company_id}")  # DEBUG
+
         # Criar a solicitação
         new_req = Request(
             requester_id=current_user.id,
-            company_id=current_user.company_id,
-            location_id=location_id,
-            equipment_id=equipment_id,
+            company_id=int(company_id),  # ✅ Garantir que é int
+            location_id=int(location_id),
+            equipment_id=int(equipment_id) if equipment_id else None,
             notes=notes
         )
 
@@ -1148,18 +1200,26 @@ def new_request():
         flash('Solicitação criada com sucesso!', 'success')
         return redirect(url_for('my_requests'))
 
-    # Obter dados para o formulário
+    # ✅ Obter dados para o formulário
     if current_user.role == 'master':
+        companies = Company.query.filter_by(is_active=True).all()
         locations = Location.query.filter_by(is_active=True).all()
         equipments = Equipment.query.filter_by(is_active=True).all()
     else:
+        companies = [current_user.company] if current_user.company else []
+        if not companies:
+            flash('Seu usuário não possui empresa associada. Contate o administrador!', 'error')
+            return redirect(url_for('dashboard'))
         locations = Location.query.filter_by(company_id=current_user.company_id, is_active=True).all()
         equipments = Equipment.query.filter_by(company_id=current_user.company_id, is_active=True).all()
 
     parts = Part.query.filter_by(is_active=True).all()
 
-    return render_template('request_form.html', locations=locations, equipments=equipments, parts=parts)
-
+    return render_template('request_form.html',
+                           locations=locations,
+                           equipments=equipments,
+                           parts=parts,
+                           companies=companies)  # ✅ Passar companies para o template
 @app.route('/requests/mine')
 @login_required
 def my_requests():
@@ -1224,65 +1284,271 @@ def manage_stock():
     return render_template('stock.html', stocks=stocks, parts=parts, companies=companies, current_company=company)
 
 
+# ============= CORREÇÃO DA FUNÇÃO ADD_STOCK =============
+# Substituir a função add_stock existente por esta versão corrigida
+
 @app.route('/stock/add', methods=['POST'])
 @login_required
 @role_required('receptor', 'admin', 'master')
 def add_stock():
-    part_id = request.form['part_id']
-    quantity = int(request.form['quantity'])
-    company_id = request.form.get('company_id') or current_user.company_id
+    try:
+        part_id = int(request.form['part_id'])
+        quantity = int(request.form['quantity'])
+        company_id = int(request.form.get('company_id') or current_user.company_id)
 
-    # Verificar se já existe estoque para esta peça/empresa
-    stock = Stock.query.filter_by(part_id=part_id, company_id=company_id).first()
+        print(f"DEBUG: Adicionando estoque - Part ID: {part_id}, Quantity: {quantity}, Company: {company_id}")
 
-    if stock:
-        stock.quantity += quantity
-        stock.last_updated = datetime.utcnow()
-    else:
-        stock = Stock(
-            part_id=part_id,
-            company_id=company_id,
-            quantity=quantity
-        )
-        db.session.add(stock)
+        # Validações
+        if quantity <= 0:
+            flash('Quantidade deve ser maior que zero!', 'error')
+            return redirect(url_for('manage_stock'))
 
-    # ← SUBSTITUIR ESTA SEÇÃO COMPLETA
-    # Criar instâncias individuais com códigos incrementais
-    part = Part.query.get(part_id)
-    created_codes = []
+        if quantity > 1000:
+            flash('Quantidade muito alta! Máximo 1000 unidades por vez.', 'error')
+            return redirect(url_for('manage_stock'))
 
-    for i in range(quantity):
-        # Gerar código incremental único
-        unique_code = generate_instance_code(part_id)
+        # Verificar se a peça existe
+        part = Part.query.get(part_id)
+        if not part:
+            flash('Peça não encontrada!', 'error')
+            return redirect(url_for('manage_stock'))
 
-        if unique_code:
-            # Dados para o QR code
-            qr_data = {
-                'part_id': part_id,
-                'company_id': company_id,
-                'unique_code': unique_code,
-                'part_name': part.name,
-                'base_code': part.base_code
-            }
-            qr_code_b64 = generate_qr_code(json.dumps(qr_data))
+        print(f"DEBUG: Peça encontrada: {part.name} | base_code: {part.base_code}")
 
-            instance = PartInstance(
+        # Garantir que a peça tem base_code
+        if not part.base_code:
+            print(f"DEBUG: Gerando base_code para peça {part.name}")
+            part.base_code = generate_base_code(part.name)
+            db.session.commit()
+            print(f"DEBUG: base_code gerado: {part.base_code}")
+
+        # Verificar se já existe estoque para esta peça/empresa
+        stock = Stock.query.filter_by(part_id=part_id, company_id=company_id).first()
+
+        if stock:
+            print(f"DEBUG: Estoque existente encontrado: {stock.quantity}")
+            stock.quantity += quantity
+            stock.last_updated = datetime.utcnow()
+        else:
+            print(f"DEBUG: Criando novo registro de estoque")
+            stock = Stock(
                 part_id=part_id,
                 company_id=company_id,
-                unique_code=unique_code,
-                qr_code=qr_code_b64
+                quantity=quantity
             )
-            db.session.add(instance)
-            created_codes.append(unique_code)
+            db.session.add(stock)
 
-    db.session.commit()
+        # Commit do estoque primeiro
+        db.session.commit()
+        print(f"DEBUG: Estoque atualizado. Novo total: {stock.quantity}")
 
-    # ← ALTERAR ESTA LINHA
-    flash(
-        f'{quantity} unidades de {part.name} adicionadas! Códigos: {", ".join(created_codes[:5])}{"..." if len(created_codes) > 5 else ""}',
-        'success')
+        # Criar instâncias individuais com códigos incrementais
+        created_codes = []
+        failed_codes = []
+
+        for i in range(quantity):
+            print(f"DEBUG: Criando instância {i + 1}/{quantity}")
+
+            # Gerar código incremental único
+            unique_code = generate_instance_code(part_id)
+            print(f"DEBUG: Código gerado: {unique_code}")
+
+            if unique_code:
+                try:
+                    # Dados para o QR code
+                    qr_data = {
+                        'part_id': part_id,
+                        'company_id': company_id,
+                        'unique_code': unique_code,
+                        'part_name': part.name,
+                        'base_code': part.base_code
+                    }
+                    qr_code_b64 = generate_qr_code(json.dumps(qr_data))
+
+                    instance = PartInstance(
+                        part_id=part_id,
+                        company_id=company_id,
+                        unique_code=unique_code,
+                        qr_code=qr_code_b64,
+                        status='em_estoque'
+                    )
+                    db.session.add(instance)
+                    created_codes.append(unique_code)
+                    print(f"DEBUG: Instância criada: {unique_code}")
+
+                except Exception as e:
+                    print(f"DEBUG: Erro ao criar instância {unique_code}: {e}")
+                    failed_codes.append(f"Erro: {e}")
+            else:
+                print(f"DEBUG: FALHOU ao gerar código para instância {i + 1}")
+                failed_codes.append(f"Instância {i + 1}")
+
+        # Commit das instâncias
+        try:
+            db.session.commit()
+            print(f"DEBUG: {len(created_codes)} instâncias salvas com sucesso")
+        except Exception as e:
+            print(f"DEBUG: ERRO ao salvar instâncias: {e}")
+            db.session.rollback()
+            flash(f'Erro ao criar instâncias: {str(e)}', 'error')
+            return redirect(url_for('manage_stock'))
+
+        # Mensagem de sucesso
+        success_msg = f'{quantity} unidades de "{part.name}" adicionadas ao estoque!'
+
+        if created_codes:
+            codes_preview = ", ".join(created_codes[:3])
+            if len(created_codes) > 3:
+                codes_preview += f" e mais {len(created_codes) - 3}"
+            success_msg += f' Códigos criados: {codes_preview}'
+
+        if failed_codes:
+            success_msg += f" | {len(failed_codes)} instâncias falharam"
+
+        flash(success_msg, 'success')
+
+        if failed_codes:
+            flash(f'Algumas instâncias falharam: {", ".join(failed_codes[:5])}', 'warning')
+
+        return redirect(url_for('manage_stock'))
+
+    except ValueError as e:
+        print(f"DEBUG: Erro de valor: {e}")
+        flash('Dados inválidos fornecidos!', 'error')
+    except Exception as e:
+        print(f"DEBUG: Erro geral: {e}")
+        db.session.rollback()
+        flash(f'Erro ao adicionar estoque: {str(e)}', 'error')
+
     return redirect(url_for('manage_stock'))
 
+
+# ============= FUNÇÃO AUXILIAR MELHORADA =============
+# Substituir a função generate_instance_code por esta versão melhorada
+
+def generate_instance_code(part_id):
+    """Gera código incremental para instância da peça (ex: MON17001) - Versão melhorada"""
+    try:
+        part = Part.query.get(part_id)
+        print(f"DEBUG generate_instance_code: Buscando peça ID {part_id}")
+
+        if not part:
+            print(f"DEBUG: ERRO - Peça ID {part_id} não encontrada!")
+            return None
+
+        # Garantir que há base_code
+        if not part.base_code:
+            print(f"DEBUG: base_code vazio para peça '{part.name}', gerando...")
+            part.base_code = generate_base_code(part.name)
+            db.session.commit()
+            print(f"DEBUG: base_code gerado: {part.base_code}")
+
+        print(f"DEBUG: Peça encontrada: '{part.name}' | base_code: '{part.base_code}'")
+
+        # Buscar último número usado para esta peça (método mais robusto)
+        last_instance = PartInstance.query.filter_by(part_id=part_id) \
+            .filter(PartInstance.unique_code.like(f'{part.base_code}%')) \
+            .order_by(PartInstance.id.desc()) \
+            .first()
+
+        next_number = 1
+        if last_instance:
+            print(f"DEBUG: Última instância encontrada: {last_instance.unique_code}")
+            try:
+                # Extrair número do código (pegar os últimos dígitos)
+                code_suffix = last_instance.unique_code.replace(part.base_code, '')
+                if code_suffix.isdigit():
+                    last_number = int(code_suffix)
+                    next_number = last_number + 1
+                    print(f"DEBUG: Último número extraído: {last_number}, próximo: {next_number}")
+                else:
+                    # Se não conseguir extrair, buscar próximo número disponível
+                    next_number = _find_next_available_number(part.base_code, part_id)
+                    print(f"DEBUG: Número não pôde ser extraído, usando próximo disponível: {next_number}")
+            except Exception as e:
+                print(f"DEBUG: Erro ao extrair número: {e}, usando 1")
+                next_number = 1
+        else:
+            print(f"DEBUG: Primeira instância para esta peça, usando número: {next_number}")
+
+        # Gerar código com tentativas de fallback
+        max_attempts = 100
+        for attempt in range(max_attempts):
+            instance_code = f"{part.base_code}{next_number:03d}"
+
+            # Verificar se já existe
+            existing = PartInstance.query.filter_by(unique_code=instance_code).first()
+            if not existing:
+                print(f"DEBUG: Código único encontrado: {instance_code}")
+                return instance_code
+
+            print(f"DEBUG: Código {instance_code} já existe, tentando próximo...")
+            next_number += 1
+
+        print(f"DEBUG: ERRO - Não foi possível gerar código único após {max_attempts} tentativas!")
+        return None
+
+    except Exception as e:
+        print(f"DEBUG: ERRO na generate_instance_code: {e}")
+        return None
+
+
+def _find_next_available_number(base_code, part_id):
+    """Encontra o próximo número disponível para o código base"""
+    try:
+        # Buscar todos os códigos existentes para esta peça
+        existing_codes = db.session.query(PartInstance.unique_code).filter_by(part_id=part_id).all()
+        existing_numbers = []
+
+        for code_tuple in existing_codes:
+            code = code_tuple[0]
+            suffix = code.replace(base_code, '')
+            if suffix.isdigit():
+                existing_numbers.append(int(suffix))
+
+        if not existing_numbers:
+            return 1
+
+        # Encontrar o primeiro gap ou retornar o próximo após o maior
+        existing_numbers.sort()
+
+        for i, num in enumerate(existing_numbers):
+            expected = i + 1
+            if num != expected:
+                return expected
+
+        return existing_numbers[-1] + 1
+
+    except Exception as e:
+        print(f"DEBUG: Erro em _find_next_available_number: {e}")
+        return 1
+
+
+# ============= ROTA DE DEBUG PARA TESTAR GERAÇÃO =============
+@app.route('/debug/test-instance-generation/<int:part_id>')
+@login_required
+@role_required('master')
+def debug_test_instance_generation(part_id):
+    """Rota de debug para testar geração de códigos"""
+    try:
+        part = Part.query.get_or_404(part_id)
+
+        # Testar geração de 5 códigos
+        test_codes = []
+        for i in range(5):
+            code = generate_instance_code(part_id)
+            test_codes.append(code)
+
+        return jsonify({
+            'success': True,
+            'part_name': part.name,
+            'base_code': part.base_code,
+            'generated_codes': test_codes,
+            'existing_instances': [inst.unique_code for inst in part.instances]
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 # ============= ENVIO DE PEÇAS =============
 @app.route('/requests/<int:id>/ship', methods=['GET', 'POST'])
 @login_required
@@ -1674,6 +1940,619 @@ def api_qr_scan():
             'message': f'Erro ao processar QR Code: {str(e)}'
         })
 
+
+# ============= APIs FALTANTES PARA O SISTEMA DE ENVIO =============
+# Adicionar essas rotas no arquivo app.py após as outras APIs
+
+@app.route('/api/parts/<int:part_id>/instances')
+@login_required
+@role_required('receptor', 'admin', 'master')
+def api_part_instances(part_id):
+    """Retorna instâncias disponíveis de uma peça para envio"""
+    try:
+        # Filtrar por empresa se não for master
+        if current_user.role == 'master':
+            company_id = request.args.get('company_id')
+            if not company_id:
+                return jsonify({'success': False, 'message': 'Company ID é obrigatório para usuários master'})
+        else:
+            company_id = current_user.company_id
+
+        # Buscar instâncias disponíveis
+        instances = PartInstance.query.filter_by(
+            part_id=part_id,
+            company_id=company_id,
+            status='em_estoque'
+        ).join(Part).all()
+
+        instances_data = []
+        for instance in instances:
+            instances_data.append({
+                'id': instance.id,
+                'unique_code': instance.unique_code,
+                'created_at': instance.created_at.strftime('%d/%m/%Y %H:%M'),
+                'warranty_expires': instance.warranty_expires.strftime(
+                    '%d/%m/%Y') if instance.warranty_expires else None,
+                'part_name': instance.part.name
+            })
+
+        return jsonify({
+            'success': True,
+            'instances': instances_data,
+            'total': len(instances_data)
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/requests/<int:request_id>/available-instances')
+@login_required
+@role_required('receptor', 'admin', 'master')
+def api_request_available_instances(request_id):
+    """Retorna todas as instâncias disponíveis para itens de uma solicitação"""
+    try:
+        req = Request.query.get_or_404(request_id)
+
+        # Verificar permissão
+        if current_user.role != 'master' and req.company_id != current_user.company_id:
+            return jsonify({'success': False, 'message': 'Acesso negado'})
+
+        available_instances = {}
+
+        for item in req.items:
+            # Calcular quantas instâncias ainda precisam ser enviadas
+            quantity_needed = item.quantity_requested - item.quantity_sent
+
+            if quantity_needed > 0:
+                instances = PartInstance.query.filter_by(
+                    part_id=item.part_id,
+                    company_id=current_user.company_id if current_user.role != 'master' else req.company_id,
+                    status='em_estoque'
+                ).limit(quantity_needed).all()
+
+                instances_data = []
+                for instance in instances:
+                    instances_data.append({
+                        'id': instance.id,
+                        'unique_code': instance.unique_code,
+                        'created_at': instance.created_at.strftime('%d/%m/%Y %H:%M'),
+                        'warranty_expires': instance.warranty_expires.strftime(
+                            '%d/%m/%Y') if instance.warranty_expires else None
+                    })
+
+                available_instances[item.id] = {
+                    'part_name': item.part.name,
+                    'quantity_requested': item.quantity_requested,
+                    'quantity_sent': item.quantity_sent,
+                    'quantity_needed': quantity_needed,
+                    'instances': instances_data
+                }
+
+        return jsonify({
+            'success': True,
+            'request_id': request_id,
+            'available_instances': available_instances
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/stock/summary')
+@login_required
+@role_required('receptor', 'admin', 'master')
+def api_stock_summary():
+    """Retorna resumo do estoque atual"""
+    try:
+        if current_user.role == 'master':
+            company_id = request.args.get('company_id')
+            if not company_id:
+                # Retornar resumo de todas as empresas
+                stocks = db.session.query(
+                    Company.name.label('company_name'),
+                    Part.name.label('part_name'),
+                    Stock.quantity,
+                    Stock.min_quantity,
+                    func.count(PartInstance.id).label('total_instances')
+                ).join(Stock, Company.id == Stock.company_id) \
+                    .join(Part, Stock.part_id == Part.id) \
+                    .outerjoin(PartInstance, and_(
+                    PartInstance.part_id == Part.id,
+                    PartInstance.company_id == Company.id
+                )).group_by(Company.id, Part.id).all()
+            else:
+                stocks = db.session.query(
+                    Part.name.label('part_name'),
+                    Stock.quantity,
+                    Stock.min_quantity,
+                    func.count(PartInstance.id).label('total_instances')
+                ).join(Part).outerjoin(PartInstance, and_(
+                    PartInstance.part_id == Part.id,
+                    PartInstance.company_id == Stock.company_id
+                )).filter(Stock.company_id == company_id) \
+                    .group_by(Part.id).all()
+        else:
+            stocks = db.session.query(
+                Part.name.label('part_name'),
+                Stock.quantity,
+                Stock.min_quantity,
+                func.count(PartInstance.id).label('total_instances')
+            ).join(Part).outerjoin(PartInstance, and_(
+                PartInstance.part_id == Part.id,
+                PartInstance.company_id == Stock.company_id
+            )).filter(Stock.company_id == current_user.company_id) \
+                .group_by(Part.id).all()
+
+        stock_data = []
+        for stock in stocks:
+            stock_info = {
+                'part_name': stock.part_name,
+                'quantity': stock.quantity,
+                'min_quantity': stock.min_quantity,
+                'total_instances': stock.total_instances or 0,
+                'status': 'baixo' if stock.quantity <= stock.min_quantity else 'normal'
+            }
+
+            if current_user.role == 'master' and hasattr(stock, 'company_name'):
+                stock_info['company_name'] = stock.company_name
+
+            stock_data.append(stock_info)
+
+        return jsonify({
+            'success': True,
+            'stock_data': stock_data,
+            'total_items': len(stock_data)
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/parts/<int:part_id>/generate-instances', methods=['POST'])
+@login_required
+@role_required('receptor', 'admin', 'master')
+def api_generate_part_instances(part_id):
+    """Gera instâncias adicionais para uma peça existente no estoque"""
+    try:
+        data = request.get_json()
+        quantity = int(data.get('quantity', 1))
+        company_id = data.get('company_id') or current_user.company_id
+
+        if quantity <= 0 or quantity > 100:
+            return jsonify({'success': False, 'message': 'Quantidade deve ser entre 1 e 100'})
+
+        # Verificar se a peça existe
+        part = Part.query.get_or_404(part_id)
+
+        # Verificar se existe estoque para esta peça/empresa
+        stock = Stock.query.filter_by(part_id=part_id, company_id=company_id).first()
+        if not stock:
+            return jsonify({'success': False, 'message': 'Não existe estoque cadastrado para esta peça'})
+
+        # Verificar se há estoque suficiente sem instâncias
+        existing_instances = PartInstance.query.filter_by(
+            part_id=part_id,
+            company_id=company_id
+        ).count()
+
+        if existing_instances >= stock.quantity:
+            return jsonify(
+                {'success': False, 'message': 'Todas as unidades do estoque já possuem instâncias individuais'})
+
+        # Limitar quantidade às unidades faltantes
+        max_quantity = stock.quantity - existing_instances
+        if quantity > max_quantity:
+            quantity = max_quantity
+
+        # Gerar instâncias
+        created_codes = []
+        for i in range(quantity):
+            unique_code = generate_instance_code(part_id)
+            if unique_code:
+                # Dados para o QR code
+                qr_data = {
+                    'part_id': part_id,
+                    'company_id': company_id,
+                    'unique_code': unique_code,
+                    'part_name': part.name,
+                    'base_code': part.base_code
+                }
+                qr_code_b64 = generate_qr_code(json.dumps(qr_data))
+
+                instance = PartInstance(
+                    part_id=part_id,
+                    company_id=company_id,
+                    unique_code=unique_code,
+                    qr_code=qr_code_b64
+                )
+                db.session.add(instance)
+                created_codes.append(unique_code)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'{len(created_codes)} instâncias criadas com sucesso',
+            'created_codes': created_codes,
+            'part_name': part.name
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/instances/<int:instance_id>/update-status', methods=['PUT'])
+@login_required
+@role_required('receptor', 'admin', 'master')
+def api_update_instance_status(instance_id):
+    """Atualiza status de uma instância específica"""
+    try:
+        instance = PartInstance.query.get_or_404(instance_id)
+
+        # Verificar permissão
+        if current_user.role != 'master' and instance.company_id != current_user.company_id:
+            return jsonify({'success': False, 'message': 'Acesso negado'})
+
+        data = request.get_json()
+        new_status = data.get('status')
+
+        valid_statuses = ['em_estoque', 'enviado', 'recebido', 'danificado', 'perdido']
+        if new_status not in valid_statuses:
+            return jsonify({'success': False, 'message': 'Status inválido'})
+
+        # Atualizar status
+        old_status = instance.status
+        instance.status = new_status
+
+        # Atualizar timestamps conforme necessário
+        if new_status == 'enviado' and old_status != 'enviado':
+            instance.sent_at = datetime.utcnow()
+        elif new_status == 'recebido' and old_status != 'recebido':
+            instance.received_at = datetime.utcnow()
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f'Status atualizado de "{old_status}" para "{new_status}"',
+            'old_status': old_status,
+            'new_status': new_status,
+            'instance_code': instance.unique_code
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/debug/part-instances/<int:part_id>')
+@login_required
+@role_required('master')  # Apenas para debug, restringir ao master
+def api_debug_part_instances(part_id):
+    """API de debug para verificar instâncias de uma peça"""
+    try:
+        part = Part.query.get_or_404(part_id)
+
+        instances = PartInstance.query.filter_by(part_id=part_id).all()
+        stocks = Stock.query.filter_by(part_id=part_id).all()
+
+        debug_data = {
+            'part_info': {
+                'id': part.id,
+                'name': part.name,
+                'base_code': part.base_code
+            },
+            'instances': [],
+            'stocks': [],
+            'total_instances': len(instances),
+            'total_stock_quantity': sum(s.quantity for s in stocks)
+        }
+
+        for instance in instances:
+            debug_data['instances'].append({
+                'id': instance.id,
+                'unique_code': instance.unique_code,
+                'status': instance.status,
+                'company_id': instance.company_id,
+                'created_at': instance.created_at.isoformat()
+            })
+
+        for stock in stocks:
+            debug_data['stocks'].append({
+                'company_id': stock.company_id,
+                'company_name': stock.company.name,
+                'quantity': stock.quantity,
+                'min_quantity': stock.min_quantity
+            })
+
+        return jsonify({
+            'success': True,
+            'debug_data': debug_data
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/admin/diagnostics')
+@login_required
+@role_required('master', 'admin')
+def system_diagnostics():
+    """Página de diagnósticos do sistema"""
+    try:
+        diagnostics = {}
+
+        # Verificar peças sem base_code
+        parts_without_base_code = Part.query.filter(
+            db.or_(Part.base_code.is_(None), Part.base_code == '')
+        ).all()
+
+        # Verificar estoque sem instâncias
+        stocks_without_instances = []
+        for stock in Stock.query.all():
+            instance_count = PartInstance.query.filter_by(
+                part_id=stock.part_id,
+                company_id=stock.company_id
+            ).count()
+            if stock.quantity > instance_count:
+                stocks_without_instances.append({
+                    'stock': stock,
+                    'missing_instances': stock.quantity - instance_count
+                })
+
+        # Verificar instâncias órfãs
+        orphan_instances = PartInstance.query.filter(
+            ~PartInstance.part_id.in_(db.session.query(Part.id))
+        ).all()
+
+        # Verificar duplicatas de códigos
+        duplicate_codes = db.session.query(
+            PartInstance.unique_code,
+            func.count(PartInstance.id).label('count')
+        ).group_by(PartInstance.unique_code).having(
+            func.count(PartInstance.id) > 1
+        ).all()
+
+        # Verificar solicitações pendentes sem instâncias disponíveis
+        problematic_requests = []
+        pending_requests = Request.query.filter_by(status='pendente').all()
+
+        for req in pending_requests:
+            for item in req.items:
+                needed = item.quantity_requested - item.quantity_sent
+                if needed > 0:
+                    available = PartInstance.query.filter_by(
+                        part_id=item.part_id,
+                        company_id=req.company_id,
+                        status='em_estoque'
+                    ).count()
+
+                    if available < needed:
+                        problematic_requests.append({
+                            'request': req,
+                            'item': item,
+                            'needed': needed,
+                            'available': available
+                        })
+
+        diagnostics = {
+            'parts_without_base_code': parts_without_base_code,
+            'stocks_without_instances': stocks_without_instances,
+            'orphan_instances': orphan_instances,
+            'duplicate_codes': duplicate_codes,
+            'problematic_requests': problematic_requests,
+            'total_parts': Part.query.count(),
+            'total_stocks': Stock.query.count(),
+            'total_instances': PartInstance.query.count(),
+            'total_requests': Request.query.count()
+        }
+
+        return render_template('diagnostics.html', diagnostics=diagnostics)
+
+    except Exception as e:
+        flash(f'Erro ao executar diagnósticos: {str(e)}', 'error')
+        return redirect(url_for('dashboard'))
+
+
+@app.route('/admin/fix-base-codes', methods=['POST'])
+@login_required
+@role_required('master')
+def fix_base_codes():
+    """Corrigir peças sem base_code"""
+    try:
+        parts_fixed = 0
+        parts_without_code = Part.query.filter(
+            db.or_(Part.base_code.is_(None), Part.base_code == '')
+        ).all()
+
+        for part in parts_without_code:
+            part.base_code = generate_base_code(part.name)
+            parts_fixed += 1
+
+        db.session.commit()
+        flash(f'{parts_fixed} peças tiveram seus códigos base corrigidos!', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao corrigir códigos base: {str(e)}', 'error')
+
+    return redirect(url_for('system_diagnostics'))
+
+
+@app.route('/admin/generate-missing-instances', methods=['POST'])
+@login_required
+@role_required('master', 'admin')
+def generate_missing_instances():
+    """Gerar instâncias faltantes para estoques"""
+    try:
+        instances_created = 0
+        company_id = request.form.get('company_id')
+
+        # Filtrar por empresa se especificado
+        if company_id:
+            stocks = Stock.query.filter_by(company_id=company_id).all()
+        elif current_user.role == 'admin':
+            stocks = Stock.query.filter_by(company_id=current_user.company_id).all()
+        else:
+            stocks = Stock.query.all()
+
+        for stock in stocks:
+            instance_count = PartInstance.query.filter_by(
+                part_id=stock.part_id,
+                company_id=stock.company_id
+            ).count()
+
+            missing_instances = stock.quantity - instance_count
+
+            if missing_instances > 0:
+                # Limitar a 100 instâncias por vez para evitar sobrecarga
+                missing_instances = min(missing_instances, 100)
+
+                for i in range(missing_instances):
+                    unique_code = generate_instance_code(stock.part_id)
+                    if unique_code:
+                        part = Part.query.get(stock.part_id)
+                        qr_data = {
+                            'part_id': stock.part_id,
+                            'company_id': stock.company_id,
+                            'unique_code': unique_code,
+                            'part_name': part.name,
+                            'base_code': part.base_code
+                        }
+                        qr_code_b64 = generate_qr_code(json.dumps(qr_data))
+
+                        instance = PartInstance(
+                            part_id=stock.part_id,
+                            company_id=stock.company_id,
+                            unique_code=unique_code,
+                            qr_code=qr_code_b64,
+                            status='em_estoque'
+                        )
+                        db.session.add(instance)
+                        instances_created += 1
+
+        db.session.commit()
+        flash(f'{instances_created} instâncias faltantes foram criadas!', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao gerar instâncias: {str(e)}', 'error')
+
+    return redirect(url_for('system_diagnostics'))
+
+
+@app.route('/admin/clean-orphans', methods=['POST'])
+@login_required
+@role_required('master')
+def clean_orphan_instances():
+    """Remover instâncias órfãs"""
+    try:
+        orphans = PartInstance.query.filter(
+            ~PartInstance.part_id.in_(db.session.query(Part.id))
+        ).all()
+
+        orphan_count = len(orphans)
+
+        for orphan in orphans:
+            db.session.delete(orphan)
+
+        db.session.commit()
+        flash(f'{orphan_count} instâncias órfãs foram removidas!', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao limpar instâncias órfãs: {str(e)}', 'error')
+
+    return redirect(url_for('system_diagnostics'))
+
+
+@app.route('/admin/fix-duplicates', methods=['POST'])
+@login_required
+@role_required('master')
+def fix_duplicate_codes():
+    """Corrigir códigos duplicados"""
+    try:
+        fixed_count = 0
+
+        # Buscar duplicatas
+        duplicate_codes = db.session.query(
+            PartInstance.unique_code,
+            func.count(PartInstance.id).label('count')
+        ).group_by(PartInstance.unique_code).having(
+            func.count(PartInstance.id) > 1
+        ).all()
+
+        for code, count in duplicate_codes:
+            # Buscar todas as instâncias com este código
+            instances = PartInstance.query.filter_by(unique_code=code).all()
+
+            # Manter a primeira, renomear as outras
+            for i, instance in enumerate(instances[1:], 1):
+                new_code = generate_instance_code(instance.part_id)
+                if new_code:
+                    instance.unique_code = new_code
+                    fixed_count += 1
+
+        db.session.commit()
+        flash(f'{fixed_count} códigos duplicados foram corrigidos!', 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao corrigir duplicatas: {str(e)}', 'error')
+
+    return redirect(url_for('system_diagnostics'))
+
+
+@app.route('/admin/system-info')
+@login_required
+@role_required('master')
+def system_info():
+    """Informações detalhadas do sistema"""
+    try:
+        info = {
+            'database_stats': {
+                'companies': Company.query.count(),
+                'users': User.query.count(),
+                'active_users': User.query.filter_by(is_active=True).count(),
+                'locations': Location.query.count(),
+                'equipments': Equipment.query.count(),
+                'parts': Part.query.count(),
+                'active_parts': Part.query.filter_by(is_active=True).count(),
+                'stocks': Stock.query.count(),
+                'instances': PartInstance.query.count(),
+                'requests': Request.query.count(),
+                'pending_requests': Request.query.filter_by(status='pendente').count(),
+                'shipments': Shipment.query.count()
+            },
+            'instance_status': db.session.query(
+                PartInstance.status,
+                func.count(PartInstance.id).label('count')
+            ).group_by(PartInstance.status).all(),
+            'request_status': db.session.query(
+                Request.status,
+                func.count(Request.id).label('count')
+            ).group_by(Request.status).all(),
+            'recent_activity': {
+                'recent_requests': Request.query.order_by(Request.created_at.desc()).limit(5).all(),
+                'recent_instances': PartInstance.query.order_by(PartInstance.created_at.desc()).limit(5).all(),
+                'low_stock': db.session.query(Stock, Part).join(Part).filter(
+                    Stock.quantity <= Stock.min_quantity
+                ).limit(10).all()
+            }
+        }
+
+        return jsonify({
+            'success': True,
+            'system_info': info
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
 # ============= INICIALIZAÇÃO DO BANCO DE DADOS =============
 def init_db():
     with app.app_context():

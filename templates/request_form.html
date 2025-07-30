@@ -1,11 +1,13 @@
 <!-- templates/request_form.html -->
 {% extends "base.html" %}
 
-{% block title %}Nova Solicitação{% endblock %}
+{% block title %}{{ 'Editar' if edit else 'Nova' }} Solicitação{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-    <h1 class="h2">Nova Solicitação de Peças</h1>
+    <h1 class="h2">
+        <i class="bi bi-plus-circle"></i> Nova Solicitação de Peças
+    </h1>
     <div class="btn-toolbar mb-2 mb-md-0">
         <a href="{{ url_for('my_requests') }}" class="btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Voltar
@@ -13,128 +15,434 @@
     </div>
 </div>
 
-<div class="row">
-    <div class="col-md-10">
-        <div class="card">
-            <div class="card-body">
-                <form method="POST" id="request-form">
+<form method="POST" id="requestForm">
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Informações da Solicitação -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-info-circle"></i> Informações da Solicitação
+                    </h5>
+                </div>
+                <div class="card-body">
+                    {% if current_user.role == 'master' %}
+                    <div class="mb-3">
+                        <label for="company_id" class="form-label">
+                            <i class="bi bi-building"></i> Empresa *
+                        </label>
+                        <select class="form-select" id="company_id" name="company_id" required onchange="loadCompanyData()">
+                            <option value="">Selecione a empresa</option>
+                            {% for company in companies %}
+                            <option value="{{ company.id }}">{{ company.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="form-text">
+                            Selecione a empresa que está fazendo a solicitação
+                        </div>
+                    </div>
+                    {% endif %}
+
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="location_id" class="form-label">Local de Destino *</label>
-                                <select class="form-select" id="location_id" name="location_id" required>
+                                <label for="location_id" class="form-label">
+                                    <i class="bi bi-geo-alt"></i> Local *
+                                </label>
+                                <select class="form-select" id="location_id" name="location_id" required onchange="loadEquipments()">
                                     <option value="">Selecione o local</option>
                                     {% for location in locations %}
                                     <option value="{{ location.id }}">{{ location.name }}</option>
                                     {% endfor %}
                                 </select>
+                                <div class="form-text">
+                                    Onde as peças serão utilizadas
+                                </div>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="equipment_id" class="form-label">Equipamento (Opcional)</label>
+                                <label for="equipment_id" class="form-label">
+                                    <i class="bi bi-pc-desktop"></i> Equipamento (Opcional)
+                                </label>
                                 <select class="form-select" id="equipment_id" name="equipment_id">
                                     <option value="">Selecione o equipamento</option>
+                                    {% for equipment in equipments %}
+                                    <option value="{{ equipment.id }}">{{ equipment.name }}</option>
+                                    {% endfor %}
                                 </select>
+                                <div class="form-text">
+                                    Equipamento específico (se aplicável)
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="notes" class="form-label">Observações</label>
+                        <label for="notes" class="form-label">
+                            <i class="bi bi-chat-left-text"></i> Observações
+                        </label>
                         <textarea class="form-control" id="notes" name="notes" rows="3"
-                                  placeholder="Descreva o motivo da solicitação ou informações adicionais"></textarea>
+                                  placeholder="Descreva o motivo da solicitação, urgência, ou outras informações importantes..."></textarea>
+                        <div class="form-text">
+                            Informações adicionais sobre a solicitação
+                        </div>
                     </div>
+                </div>
+            </div>
 
-                    <hr>
-
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5>Peças Solicitadas</h5>
-                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="addPartRow()">
-                            <i class="bi bi-plus"></i> Adicionar Peça
-                        </button>
-                    </div>
-
-                    <div id="parts-container">
-                        <div class="row part-row mb-2">
-                            <div class="col-md-7">
-                                <select class="form-select" name="part_ids" required>
-                                    <option value="">Selecione a peça</option>
-                                    {% for part in parts %}
-                                    <option value="{{ part.id }}">{{ part.name }} - {{ part.part_number or 'S/N' }}</option>
-                                    {% endfor %}
-                                </select>
+            <!-- Peças Solicitadas -->
+            <div class="card mb-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-list-check"></i> Peças Solicitadas
+                    </h5>
+                    <button type="button" class="btn btn-sm btn-primary" onclick="addPartRow()">
+                        <i class="bi bi-plus"></i> Adicionar Peça
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="partsContainer">
+                        <!-- Primeira linha de peça -->
+                        <div class="part-row mb-3 p-3 border rounded" data-row="0">
+                            <div class="row align-items-end">
+                                <div class="col-md-6">
+                                    <label class="form-label">Peça *</label>
+                                    <select class="form-select part-select" name="part_ids" required onchange="updatePartInfo(0)">
+                                        <option value="">Selecione uma peça</option>
+                                        {% for part in parts %}
+                                        <option value="{{ part.id }}"
+                                                data-description="{{ part.description or '' }}"
+                                                data-category="{{ part.category or '' }}"
+                                                data-unit="{{ part.unit_measure or 'unidade' }}"
+                                                data-code="{{ part.base_code or '' }}">
+                                            {{ part.name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Quantidade *</label>
+                                    <input type="number" class="form-control" name="quantities" required min="1" value="1">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Unidade</label>
+                                    <input type="text" class="form-control unit-display" readonly value="unidade">
+                                </div>
+                                <div class="col-md-1">
+                                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePartRow(0)" style="display: none;">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="col-md-3">
-                                <input type="number" class="form-control" name="quantities" min="1" placeholder="Qtd" required>
-                            </div>
-                            <div class="col-md-2">
-                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePartRow(this)">
-                                    <i class="bi bi-trash"></i>
-                                </button>
+                            <div class="part-info mt-2" style="display: none;">
+                                <small class="text-muted">
+                                    <strong>Descrição:</strong> <span class="part-description"></span><br>
+                                    <strong>Categoria:</strong> <span class="part-category"></span>
+                                    <strong>Código:</strong> <span class="part-code"></span>
+                                </small>
                             </div>
                         </div>
                     </div>
 
-                    <hr>
+                    <div class="text-muted">
+                        <small>
+                            <i class="bi bi-info-circle"></i>
+                            Adicione todas as peças necessárias para esta solicitação
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-                    <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+        <div class="col-md-4">
+            <!-- Resumo da Solicitação -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-clipboard-check"></i> Resumo da Solicitação
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <strong>Solicitante:</strong><br>
+                        <span class="text-primary">{{ current_user.username }}</span>
+                    </div>
+
+                    {% if current_user.company %}
+                    <div class="mb-3">
+                        <strong>Empresa:</strong><br>
+                        <span class="text-muted">{{ current_user.company.name }}</span>
+                    </div>
+                    {% endif %}
+
+                    <div class="mb-3">
+                        <strong>Data:</strong><br>
+                        <span class="text-muted">{{ now.strftime('%d/%m/%Y às %H:%M') }}</span>
+                    </div>
+
+                    <div class="mb-3">
+                        <strong>Total de Itens:</strong><br>
+                        <span class="badge bg-primary" id="totalItems">1</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dicas -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-lightbulb"></i> Dicas
+                    </h6>
+                </div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li class="mb-2">
+                            <i class="bi bi-check2 text-success"></i>
+                            Seja específico nas observações
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check2 text-success"></i>
+                            Indique se há urgência
+                        </li>
+                        <li class="mb-2">
+                            <i class="bi bi-check2 text-success"></i>
+                            Verifique as quantidades
+                        </li>
+                        <li>
+                            <i class="bi bi-check2 text-success"></i>
+                            Selecione o local correto
+                        </li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Ações -->
+            <div class="card">
+                <div class="card-body">
+                    <div class="d-grid gap-2">
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-send"></i> Enviar Solicitação
                         </button>
+                        <a href="{{ url_for('my_requests') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x-circle"></i> Cancelar
+                        </a>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
-</div>
+</form>
 
 <script>
-    // Carregar equipamentos quando local for selecionado
-    document.getElementById('location_id').addEventListener('change', function() {
-        const locationId = this.value;
-        const equipmentSelect = document.getElementById('equipment_id');
+let partRowCount = 1;
 
-        equipmentSelect.innerHTML = '<option value="">Carregando...</option>';
+// Adicionar nova linha de peça
+function addPartRow() {
+    const container = document.getElementById('partsContainer');
+    const newRow = document.createElement('div');
+    newRow.className = 'part-row mb-3 p-3 border rounded';
+    newRow.setAttribute('data-row', partRowCount);
 
-        if (locationId) {
-            fetch(`/api/equipments/${locationId}`)
-                .then(response => response.json())
-                .then(data => {
-                    equipmentSelect.innerHTML = '<option value="">Selecione o equipamento</option>';
-                    data.forEach(equipment => {
-                        equipmentSelect.innerHTML += `<option value="${equipment.id}">${equipment.name}</option>`;
-                    });
-                })
-                .catch(error => {
-                    equipmentSelect.innerHTML = '<option value="">Erro ao carregar</option>';
+    newRow.innerHTML = `
+        <div class="row align-items-end">
+            <div class="col-md-6">
+                <label class="form-label">Peça *</label>
+                <select class="form-select part-select" name="part_ids" required onchange="updatePartInfo(${partRowCount})">
+                    <option value="">Selecione uma peça</option>
+                    {% for part in parts %}
+                    <option value="{{ part.id }}"
+                            data-description="{{ part.description or '' }}"
+                            data-category="{{ part.category or '' }}"
+                            data-unit="{{ part.unit_measure or 'unidade' }}"
+                            data-code="{{ part.base_code or '' }}">
+                        {{ part.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Quantidade *</label>
+                <input type="number" class="form-control" name="quantities" required min="1" value="1" onchange="updateTotalItems()">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Unidade</label>
+                <input type="text" class="form-control unit-display" readonly value="unidade">
+            </div>
+            <div class="col-md-1">
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removePartRow(${partRowCount})">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+        <div class="part-info mt-2" style="display: none;">
+            <small class="text-muted">
+                <strong>Descrição:</strong> <span class="part-description"></span><br>
+                <strong>Categoria:</strong> <span class="part-category"></span>
+                <strong>Código:</strong> <span class="part-code"></span>
+            </small>
+        </div>
+    `;
+
+    container.appendChild(newRow);
+    partRowCount++;
+    updateTotalItems();
+    updateRemoveButtons();
+}
+
+// Remover linha de peça
+function removePartRow(rowIndex) {
+    const row = document.querySelector(`[data-row="${rowIndex}"]`);
+    if (row) {
+        row.remove();
+        updateTotalItems();
+        updateRemoveButtons();
+    }
+}
+
+// Atualizar botões de remover
+function updateRemoveButtons() {
+    const rows = document.querySelectorAll('.part-row');
+    rows.forEach((row, index) => {
+        const removeBtn = row.querySelector('.btn-outline-danger');
+        if (removeBtn) {
+            removeBtn.style.display = rows.length > 1 ? 'block' : 'none';
+        }
+    });
+}
+
+// Atualizar informações da peça
+function updatePartInfo(rowIndex) {
+    const row = document.querySelector(`[data-row="${rowIndex}"]`);
+    const select = row.querySelector('.part-select');
+    const selectedOption = select.options[select.selectedIndex];
+
+    if (selectedOption.value) {
+        const unitDisplay = row.querySelector('.unit-display');
+        const partInfo = row.querySelector('.part-info');
+        const descSpan = row.querySelector('.part-description');
+        const categorySpan = row.querySelector('.part-category');
+        const codeSpan = row.querySelector('.part-code');
+
+        unitDisplay.value = selectedOption.dataset.unit;
+        descSpan.textContent = selectedOption.dataset.description;
+        categorySpan.textContent = selectedOption.dataset.category;
+        codeSpan.textContent = selectedOption.dataset.code;
+
+        partInfo.style.display = 'block';
+    } else {
+        row.querySelector('.part-info').style.display = 'none';
+        row.querySelector('.unit-display').value = 'unidade';
+    }
+}
+
+// Atualizar total de itens
+function updateTotalItems() {
+    const quantities = document.querySelectorAll('input[name="quantities"]');
+    let total = 0;
+    quantities.forEach(input => {
+        total += parseInt(input.value) || 0;
+    });
+    document.getElementById('totalItems').textContent = total;
+}
+
+// Carregar dados da empresa (para masters)
+function loadCompanyData() {
+    const companyId = document.getElementById('company_id').value;
+    if (companyId) {
+        // Carregar locais da empresa
+        fetch(`/api/locations/${companyId}`)
+            .then(response => response.json())
+            .then(locations => {
+                const locationSelect = document.getElementById('location_id');
+                locationSelect.innerHTML = '<option value="">Selecione o local</option>';
+                locations.forEach(location => {
+                    locationSelect.innerHTML += `<option value="${location.id}">${location.name}</option>`;
                 });
-        } else {
-            equipmentSelect.innerHTML = '<option value="">Selecione o equipamento</option>';
+            })
+            .catch(error => console.error('Erro ao carregar locais:', error));
+    }
+}
+
+// Carregar equipamentos do local
+function loadEquipments() {
+    const locationId = document.getElementById('location_id').value;
+    if (locationId) {
+        fetch(`/api/equipments/${locationId}`)
+            .then(response => response.json())
+            .then(equipments => {
+                const equipmentSelect = document.getElementById('equipment_id');
+                equipmentSelect.innerHTML = '<option value="">Selecione o equipamento</option>';
+                equipments.forEach(equipment => {
+                    equipmentSelect.innerHTML += `<option value="${equipment.id}">${equipment.name}</option>`;
+                });
+            })
+            .catch(error => console.error('Erro ao carregar equipamentos:', error));
+    }
+}
+
+// Validação do formulário
+document.getElementById('requestForm').addEventListener('submit', function(e) {
+    const partSelects = document.querySelectorAll('select[name="part_ids"]');
+    let hasValidParts = false;
+
+    partSelects.forEach(select => {
+        if (select.value) {
+            hasValidParts = true;
         }
     });
 
-    function addPartRow() {
-        const container = document.getElementById('parts-container');
-        const firstRow = container.querySelector('.part-row');
-        const newRow = firstRow.cloneNode(true);
-
-        // Limpar valores
-        newRow.querySelectorAll('select, input').forEach(el => el.value = '');
-
-        container.appendChild(newRow);
+    if (!hasValidParts) {
+        e.preventDefault();
+        alert('Selecione pelo menos uma peça para a solicitação!');
+        return false;
     }
+});
 
-    function removePartRow(button) {
-        const container = document.getElementById('parts-container');
-        const rows = container.querySelectorAll('.part-row');
+// Inicialização
+document.addEventListener('DOMContentLoaded', function() {
+    updateRemoveButtons();
+    updateTotalItems();
 
-        if (rows.length > 1) {
-            button.closest('.part-row').remove();
-        } else {
-            alert('Pelo menos uma peça deve ser solicitada');
+    // Event listener para atualizar total quando quantidade muda
+    document.addEventListener('input', function(e) {
+        if (e.target.name === 'quantities') {
+            updateTotalItems();
         }
-    }
+    });
+});
 </script>
+
+<style>
+.part-row {
+    background-color: #f8f9fa;
+    border: 1px dashed #dee2e6 !important;
+    transition: all 0.3s ease;
+}
+
+.part-row:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd !important;
+}
+
+.part-info {
+    background-color: #fff;
+    padding: 0.5rem;
+    border-radius: 0.25rem;
+    border: 1px solid #e9ecef;
+}
+
+.unit-display {
+    background-color: #f8f9fa !important;
+    font-weight: 500;
+}
+
+@media (max-width: 768px) {
+    .col-md-1, .col-md-2, .col-md-3, .col-md-6 {
+        margin-bottom: 1rem;
+    }
+}
+</style>
+
 {% endblock %}
