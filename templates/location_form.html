@@ -1,0 +1,49 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    {% if location %}Editar Local{% else %}Novo Local{% endif %}
+{% endblock %}
+
+{% block content %}
+<div class="mt-4 mb-3 d-flex justify-content-between align-items-center">
+    <h2>
+        <i class="bi bi-geo-alt"></i>
+        {% if location %}Editar Local{% else %}Novo Local{% endif %}
+    </h2>
+    <a href="{{ url_for('manage_locations') }}" class="btn btn-secondary">
+        <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+</div>
+
+<form method="POST">
+    <div class="mb-3">
+        <label for="name" class="form-label">Nome do Local</label>
+        <input type="text" name="name" id="name" class="form-control" required
+               value="{{ location.name if location else '' }}">
+    </div>
+
+    <div class="mb-3">
+        <label for="description" class="form-label">Descrição</label>
+        <textarea name="description" id="description" class="form-control" rows="3">{{ location.description if location else '' }}</textarea>
+    </div>
+
+    {% if current_user.role == 'master' %}
+    <div class="mb-3">
+        <label for="company_id" class="form-label">Empresa</label>
+        <select name="company_id" id="company_id" class="form-select" required>
+            <option value="">-- Selecione --</option>
+            {% for company in companies %}
+                <option value="{{ company.id }}"
+                    {% if location and location.company_id == company.id %}selected{% endif %}>
+                    {{ company.name }}
+                </option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    <button type="submit" class="btn btn-success">
+        <i class="bi bi-check-circle"></i> Salvar
+    </button>
+</form>
+{% endblock %}
