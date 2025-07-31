@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Equipamentos Cadastrados{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mt-4 mb-3">
+    <h2><i class="bi bi-tools"></i> Equipamentos</h2>
+    <a href="{{ url_for('new_equipment') }}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Novo Equipamento
+    </a>
+</div>
+
+{% if equipments %}
+<div class="table-responsive">
+    <table class="table table-hover table-bordered align-middle">
+        <thead class="table-light">
+            <tr>
+                <th>#</th>
+                <th>Nome</th>
+                <th>Modelo</th>
+                <th>Serial</th>
+                <th>Local</th>
+                {% if current_user.role == 'master' %}
+                <th>Empresa</th>
+                {% endif %}
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for equipment in equipments %}
+            <tr>
+                <td>{{ equipment.id }}</td>
+                <td>{{ equipment.name }}</td>
+                <td>{{ equipment.model or '-' }}</td>
+                <td>{{ equipment.serial_number or '-' }}</td>
+                <td>{{ equipment.location.name if equipment.location else '-' }}</td>
+                {% if current_user.role == 'master' %}
+                <td>{{ equipment.company.name }}</td>
+                {% endif %}
+                <td>
+                    {% if equipment.is_active %}
+                    <span class="badge bg-success">Ativo</span>
+                    {% else %}
+                    <span class="badge bg-danger">Inativo</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="alert alert-info">
+    Nenhum equipamento cadastrado ainda.
+</div>
+{% endif %}
+{% endblock %}
