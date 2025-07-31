@@ -2604,6 +2604,668 @@ def api_quick_search(code):
             'found': False,
             'message': f'Erro interno: {str(e)}'
         })
+
+
+# ============= EXPORTAÇÃO DE RELATÓRIOS =============
+# APIs para filtros dinâmicos
+@app.route('/api/reports/filters/<int:company_id>')
+@login_required
+@role_required('admin', 'master', 'receptor')
+def api_report_filters(company_id):
+    """Retorna dados para os filtros do relatório"""
+    try:
+        # Verificar permissão
+        if current_user.role != 'master' and company_id != current_user.company_id:
+            return jsonify({'success': False, 'message': 'Acesso negado'})
+
+        # Buscar usuários da empresa
+        users = User.query.filter_by(company_id=company_id, is_active=True).all()
+        users_data = [{'id': u.id, 'name': u.username, 'email': u.email} for u in users]
+
+        # Buscar peças ativas
+        parts = Part.query.filter_by(is_active=True).all()
+        parts_data = [{'id': p.id, 'name': p.name, 'category': p.category} for p in parts]
+
+        # Buscar locais da empresa
+        locations = Location.query.filter_by(company_id=company_id, is_active=True).all()
+        locations_data = [{'id': l.id, 'name': l.name} for l in locations]
+
+        # Status possíveis
+        statuses = [
+            {'value': 'pendente', 'label': 'Pendente'},
+            {'value': 'enviado', 'label': 'Enviado'},
+            {'value': 'recebido', 'label': 'Recebido'},
+            {'value': 'cancelado', 'label': 'Cancelado'}
+        ]
+
+        return jsonify({
+            'success': True,
+            'filters': {
+                'users': users_data,
+                'parts': parts_data,
+                'locations': locations_data,
+                'statuses': statuses
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+@app.route('/api/reports/preview')
+@login_required
+@role_required('admin', 'master', 'receptor')
+def api_report_preview():
+    """Preview dos dados do relatório antes da exportação"""
+    try:
+        # Mesmos parâmetros da exportação
+        company_id = request.args.get('company_id')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        report_type = request.args.get('report_type', 'summary')
+        part_id = request.args.get('part_id')
+        user_id = request.args.get('user_id')
+        location_id = request.args.get('location_id')
+        status = request.args.get('status')
+
+        if not company_id or not start_date or not end_date:
+            return jsonify({'success': False, 'message': 'Parâmetros obrigatórios faltando'})
+
+        # Verificar permissões
+        if current_user.role != 'master' and str(company_id) != str(current_user.company_id):
+            return jsonify({'success': False, 'message': 'Acesso negado'})
+
+        # Converter datas
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+
+        # Gerar preview (máximo 100 registros)
+        if report_type == 'detailed_requests':
+            data, headers = get_detailed_requests_export(company_id, start, end, part_id, user_id, location_id, status)
+        elif report_type == 'parts_movement':
+            data, headers = get_parts_movement_export(company_id, start, end, part_id)
+        elif report_type == 'user_activity':
+            data, headers = get_user_activity_export(company_id, start, end, user_id)
+        elif report_type == 'stock_detailed':
+            data, headers = get_stock_detailed_export(company_id, part_id)
+        elif report_type == 'instances_tracking':
+            data, headers = get_instances_tracking_export(company_id, start, end, part_id, status)
+        else:
+            data, headers = get_summary_export(company_id, start, end)
+
+        # Limitar preview
+        preview_data = data[:100] if len(data) > 100 else data
+
+        return jsonify({
+            'success': True,
+            'preview': {
+                'headers': headers,
+                'data': preview_data,
+                'total_records': len(data),
+                'showing_records': len(preview_data),
+                'has_more': len(data) > 100
+            }
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)})
+
+
+# ============= EXPORTAÇÃO DE RELATÓRIOS =============
+@app.route('/reports/export')
+@login_required
+@role_required('admin', 'master', 'receptor')
+def export_report():
+    """Exportar relatórios em CSV ou PDF com filtros avançados"""
+    try:
+        # Parâmetros da requisição
+        company_id = request.args.get('company_id')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        report_type = request.args.get('report_type', 'summary')
+        export_format = request.args.get('format', 'csv')
+        part_id = request.args.get('part_id')  # Filtro por peça
+        user_id = request.args.get('user_id')  # Filtro por usuário
+        location_id = request.args.get('location_id')  # Filtro por local
+        status = request.args.get('status')  # Filtro por status
+
+        # Validações
+        if not company_id or not start_date or not end_date:
+            flash('Parâmetros obrigatórios faltando!', 'error')
+            return redirect(url_for('reports'))
+
+        # Verificar permissões
+        if current_user.role != 'master' and str(company_id) != str(current_user.company_id):
+            flash('Acesso negado!', 'error')
+            return redirect(url_for('reports'))
+
+        # Converter datas
+        start = datetime.strptime(start_date, '%Y-%m-%d')
+        end = datetime.strptime(end_date, '%Y-%m-%d') + timedelta(days=1)
+
+        # Obter empresa
+        company = Company.query.get_or_404(company_id)
+
+        # Gerar dados do relatório baseado no tipo
+        if report_type == 'detailed_requests':
+            data, headers = get_detailed_requests_export(company_id, start, end, part_id, user_id, location_id, status)
+        elif report_type == 'parts_movement':
+            data, headers = get_parts_movement_export(company_id, start, end, part_id)
+        elif report_type == 'user_activity':
+            data, headers = get_user_activity_export(company_id, start, end, user_id)
+        elif report_type == 'stock_detailed':
+            data, headers = get_stock_detailed_export(company_id, part_id)
+        elif report_type == 'instances_tracking':
+            data, headers = get_instances_tracking_export(company_id, start, end, part_id, status)
+        else:
+            data, headers = get_summary_export(company_id, start, end)
+
+        # Nome do arquivo
+        filename_base = f"relatorio_{report_type}_{company.name.replace(' ', '_')}_{start_date}_a_{end_date}"
+
+        if export_format == 'csv':
+            return export_to_csv(data, headers, filename_base)
+        elif export_format == 'pdf':
+            return export_to_pdf(data, headers, filename_base, company, start_date, end_date, report_type)
+        else:
+            flash('Formato de exportação inválido!', 'error')
+            return redirect(url_for('reports'))
+
+    except Exception as e:
+        flash(f'Erro ao exportar relatório: {str(e)}', 'error')
+        return redirect(url_for('reports'))
+
+
+def get_detailed_requests_export(company_id, start_date, end_date, part_id=None, user_id=None, location_id=None,
+                                 status=None):
+    """Relatório detalhado de solicitações com todos os filtros"""
+
+    query = db.session.query(
+        Request.id.label('ID_Solicitacao'),
+        Request.created_at.label('Data_Criacao'),
+        User.username.label('Solicitante'),
+        User.email.label('Email_Solicitante'),
+        Company.name.label('Empresa'),
+        Location.name.label('Local'),
+        Equipment.name.label('Equipamento'),
+        Request.status.label('Status_Solicitacao'),
+        Part.name.label('Peca'),
+        Part.part_number.label('Codigo_Peca'),
+        Part.category.label('Categoria'),
+        RequestItem.quantity_requested.label('Qtd_Solicitada'),
+        RequestItem.quantity_sent.label('Qtd_Enviada'),
+        RequestItem.quantity_received.label('Qtd_Recebida'),
+        Request.notes.label('Observacoes'),
+        Shipment.tracking_number.label('Codigo_Rastreamento'),
+        Shipment.shipping_method.label('Metodo_Envio'),
+        Shipment.sent_at.label('Data_Envio')
+    ).select_from(Request) \
+        .join(User, Request.requester_id == User.id) \
+        .join(Company, Request.company_id == Company.id) \
+        .join(Location, Request.location_id == Location.id) \
+        .outerjoin(Equipment, Request.equipment_id == Equipment.id) \
+        .join(RequestItem, Request.id == RequestItem.request_id) \
+        .join(Part, RequestItem.part_id == Part.id) \
+        .outerjoin(Shipment, Request.id == Shipment.request_id) \
+        .filter(
+        Request.company_id == company_id,
+        Request.created_at.between(start_date, end_date)
+    )
+
+    # Aplicar filtros opcionais
+    if part_id:
+        query = query.filter(Part.id == part_id)
+    if user_id:
+        query = query.filter(User.id == user_id)
+    if location_id:
+        query = query.filter(Location.id == location_id)
+    if status:
+        query = query.filter(Request.status == status)
+
+    results = query.order_by(Request.created_at.desc()).all()
+
+    headers = [
+        'ID Solicitação', 'Data Criação', 'Solicitante', 'Email', 'Empresa',
+        'Local', 'Equipamento', 'Status', 'Peça', 'Código Peça', 'Categoria',
+        'Qtd Solicitada', 'Qtd Enviada', 'Qtd Recebida', 'Observações',
+        'Código Rastreamento', 'Método Envio', 'Data Envio'
+    ]
+
+    data = []
+    for row in results:
+        data.append([
+            row.ID_Solicitacao,
+            row.Data_Criacao.strftime('%d/%m/%Y %H:%M') if row.Data_Criacao else '',
+            row.Solicitante,
+            row.Email_Solicitante,
+            row.Empresa,
+            row.Local,
+            row.Equipamento or 'N/A',
+            row.Status_Solicitacao,
+            row.Peca,
+            row.Codigo_Peca or '',
+            row.Categoria or '',
+            row.Qtd_Solicitada,
+            row.Qtd_Enviada,
+            row.Qtd_Recebida,
+            row.Observacoes or '',
+            row.Codigo_Rastreamento or '',
+            row.Metodo_Envio or '',
+            row.Data_Envio.strftime('%d/%m/%Y %H:%M') if row.Data_Envio else ''
+        ])
+
+    return data, headers
+
+
+def get_parts_movement_export(company_id, start_date, end_date, part_id=None):
+    """Relatório detalhado de movimentação de peças"""
+
+    query = db.session.query(
+        Part.id.label('ID_Peca'),
+        Part.name.label('Nome_Peca'),
+        Part.part_number.label('Codigo_Peca'),
+        Part.category.label('Categoria'),
+        Part.unit_measure.label('Unidade'),
+        Stock.quantity.label('Estoque_Atual'),
+        Stock.min_quantity.label('Estoque_Minimo'),
+        func.sum(RequestItem.quantity_requested).label('Total_Solicitado'),
+        func.sum(RequestItem.quantity_sent).label('Total_Enviado'),
+        func.sum(RequestItem.quantity_received).label('Total_Recebido'),
+        func.count(PartInstance.id).label('Total_Instancias'),
+        func.sum(func.case([(PartInstance.status == 'em_estoque', 1)], else_=0)).label('Instancias_Estoque'),
+        func.sum(func.case([(PartInstance.status == 'enviado', 1)], else_=0)).label('Instancias_Enviadas'),
+        func.sum(func.case([(PartInstance.status == 'recebido', 1)], else_=0)).label('Instancias_Recebidas')
+    ).select_from(Part) \
+        .join(Stock, Part.id == Stock.part_id) \
+        .outerjoin(RequestItem, Part.id == RequestItem.part_id) \
+        .outerjoin(Request, RequestItem.request_id == Request.id) \
+        .outerjoin(PartInstance, and_(Part.id == PartInstance.part_id, PartInstance.company_id == company_id)) \
+        .filter(Stock.company_id == company_id)
+
+    # Filtrar por período nas solicitações
+    if start_date and end_date:
+        query = query.filter(db.or_(
+            Request.created_at.between(start_date, end_date),
+            Request.created_at.is_(None)
+        ))
+
+    # Filtrar por peça específica
+    if part_id:
+        query = query.filter(Part.id == part_id)
+
+    results = query.group_by(Part.id, Stock.id).all()
+
+    headers = [
+        'ID Peça', 'Nome Peça', 'Código Peça', 'Categoria', 'Unidade',
+        'Estoque Atual', 'Estoque Mínimo', 'Total Solicitado', 'Total Enviado',
+        'Total Recebido', 'Total Instâncias', 'Instâncias em Estoque',
+        'Instâncias Enviadas', 'Instâncias Recebidas', 'Status Estoque'
+    ]
+
+    data = []
+    for row in results:
+        status_estoque = 'BAIXO' if (row.Estoque_Atual or 0) <= (row.Estoque_Minimo or 0) else 'NORMAL'
+
+        data.append([
+            row.ID_Peca,
+            row.Nome_Peca,
+            row.Codigo_Peca or '',
+            row.Categoria or '',
+            row.Unidade or '',
+            row.Estoque_Atual or 0,
+            row.Estoque_Minimo or 0,
+            row.Total_Solicitado or 0,
+            row.Total_Enviado or 0,
+            row.Total_Recebido or 0,
+            row.Total_Instancias or 0,
+            row.Instancias_Estoque or 0,
+            row.Instancias_Enviadas or 0,
+            row.Instancias_Recebidas or 0,
+            status_estoque
+        ])
+
+    return data, headers
+
+
+def get_user_activity_export(company_id, start_date, end_date, user_id=None):
+    """Relatório detalhado de atividades dos usuários"""
+
+    query = db.session.query(
+        User.id.label('ID_Usuario'),
+        User.username.label('Usuario'),
+        User.email.label('Email'),
+        User.role.label('Perfil'),
+        func.count(Request.id).label('Total_Solicitacoes'),
+        func.sum(RequestItem.quantity_requested).label('Total_Itens_Solicitados'),
+        func.sum(RequestItem.quantity_sent).label('Total_Itens_Enviados'),
+        func.sum(RequestItem.quantity_received).label('Total_Itens_Recebidos'),
+        func.count(func.case([(Request.status == 'pendente', 1)])).label('Solicitacoes_Pendentes'),
+        func.count(func.case([(Request.status == 'enviado', 1)])).label('Solicitacoes_Enviadas'),
+        func.count(func.case([(Request.status == 'recebido', 1)])).label('Solicitacoes_Recebidas'),
+        func.min(Request.created_at).label('Primeira_Solicitacao'),
+        func.max(Request.created_at).label('Ultima_Solicitacao')
+    ).select_from(User) \
+        .outerjoin(Request, User.id == Request.requester_id) \
+        .outerjoin(RequestItem, Request.id == RequestItem.request_id) \
+        .filter(User.company_id == company_id)
+
+    # Filtrar por período
+    if start_date and end_date:
+        query = query.filter(db.or_(
+            Request.created_at.between(start_date, end_date),
+            Request.created_at.is_(None)
+        ))
+
+    # Filtrar por usuário específico
+    if user_id:
+        query = query.filter(User.id == user_id)
+
+    results = query.group_by(User.id).all()
+
+    headers = [
+        'ID Usuário', 'Usuário', 'Email', 'Perfil', 'Total Solicitações',
+        'Total Itens Solicitados', 'Total Itens Enviados', 'Total Itens Recebidos',
+        'Solicitações Pendentes', 'Solicitações Enviadas', 'Solicitações Recebidas',
+        'Primeira Solicitação', 'Última Solicitação', 'Status Atividade'
+    ]
+
+    data = []
+    for row in results:
+        # Determinar status de atividade
+        if not row.Total_Solicitacoes:
+            status_atividade = 'INATIVO'
+        elif row.Solicitacoes_Pendentes > 0:
+            status_atividade = 'ATIVO - PENDÊNCIAS'
+        else:
+            status_atividade = 'ATIVO'
+
+        data.append([
+            row.ID_Usuario,
+            row.Usuario,
+            row.Email,
+            row.Perfil.upper(),
+            row.Total_Solicitacoes or 0,
+            row.Total_Itens_Solicitados or 0,
+            row.Total_Itens_Enviados or 0,
+            row.Total_Itens_Recebidos or 0,
+            row.Solicitacoes_Pendentes or 0,
+            row.Solicitacoes_Enviadas or 0,
+            row.Solicitacoes_Recebidas or 0,
+            row.Primeira_Solicitacao.strftime('%d/%m/%Y') if row.Primeira_Solicitacao else '',
+            row.Ultima_Solicitacao.strftime('%d/%m/%Y') if row.Ultima_Solicitacao else '',
+            status_atividade
+        ])
+
+    return data, headers
+
+
+def get_stock_detailed_export(company_id, part_id=None):
+    """Relatório detalhado do estoque atual"""
+
+    query = db.session.query(
+        Part.id.label('ID_Peca'),
+        Part.name.label('Nome_Peca'),
+        Part.part_number.label('Codigo_Peca'),
+        Part.base_code.label('Codigo_Base'),
+        Part.category.label('Categoria'),
+        Part.unit_measure.label('Unidade'),
+        Part.description.label('Descricao'),
+        Stock.quantity.label('Quantidade_Estoque'),
+        Stock.min_quantity.label('Estoque_Minimo'),
+        Stock.last_updated.label('Ultima_Atualizacao'),
+        func.count(PartInstance.id).label('Total_Instancias'),
+        func.sum(func.case([(PartInstance.status == 'em_estoque', 1)], else_=0)).label('Instancias_Disponiveis'),
+        func.sum(func.case([(PartInstance.status == 'enviado', 1)], else_=0)).label('Instancias_Enviadas'),
+        func.sum(func.case([(PartInstance.status == 'recebido', 1)], else_=0)).label('Instancias_Recebidas'),
+        func.sum(func.case([(PartInstance.status == 'danificado', 1)], else_=0)).label('Instancias_Danificadas')
+    ).select_from(Part) \
+        .join(Stock, Part.id == Stock.part_id) \
+        .outerjoin(PartInstance, and_(Part.id == PartInstance.part_id, PartInstance.company_id == company_id)) \
+        .filter(Part.is_active == True, Stock.company_id == company_id)
+
+    # Filtrar por peça específica
+    if part_id:
+        query = query.filter(Part.id == part_id)
+
+    results = query.group_by(Part.id, Stock.id).order_by(Part.name).all()
+
+    headers = [
+        'ID Peça', 'Nome Peça', 'Código Peça', 'Código Base', 'Categoria',
+        'Unidade', 'Descrição', 'Quantidade Estoque', 'Estoque Mínimo',
+        'Última Atualização', 'Total Instâncias', 'Instâncias Disponíveis',
+        'Instâncias Enviadas', 'Instâncias Recebidas', 'Instâncias Danificadas',
+        'Status Estoque', 'Diferença Instâncias'
+    ]
+
+    data = []
+    for row in results:
+        status_estoque = 'CRÍTICO' if row.Quantidade_Estoque <= row.Estoque_Minimo else 'NORMAL'
+        diferenca_instancias = (row.Quantidade_Estoque or 0) - (row.Total_Instancias or 0)
+
+        data.append([
+            row.ID_Peca,
+            row.Nome_Peca,
+            row.Codigo_Peca or '',
+            row.Codigo_Base or '',
+            row.Categoria or '',
+            row.Unidade or '',
+            row.Descricao or '',
+            row.Quantidade_Estoque or 0,
+            row.Estoque_Minimo or 0,
+            row.Ultima_Atualizacao.strftime('%d/%m/%Y %H:%M') if row.Ultima_Atualizacao else '',
+            row.Total_Instancias or 0,
+            row.Instancias_Disponiveis or 0,
+            row.Instancias_Enviadas or 0,
+            row.Instancias_Recebidas or 0,
+            row.Instancias_Danificadas or 0,
+            status_estoque,
+            diferenca_instancias
+        ])
+
+    return data, headers
+
+
+def get_instances_tracking_export(company_id, start_date, end_date, part_id=None, status=None):
+    """Relatório de rastreamento de instâncias individuais"""
+
+    query = db.session.query(
+        PartInstance.id.label('ID_Instancia'),
+        PartInstance.unique_code.label('Codigo_Unico'),
+        Part.name.label('Nome_Peca'),
+        Part.part_number.label('Codigo_Peca'),
+        PartInstance.status.label('Status'),
+        PartInstance.created_at.label('Data_Criacao'),
+        PartInstance.sent_at.label('Data_Envio'),
+        PartInstance.received_at.label('Data_Recebimento'),
+        PartInstance.warranty_expires.label('Garantia_Expira'),
+        Company.name.label('Empresa'),
+        Request.id.label('ID_Solicitacao'),
+        User.username.label('Solicitante'),
+        Location.name.label('Local_Destino'),
+        Shipment.tracking_number.label('Codigo_Rastreamento')
+    ).select_from(PartInstance) \
+        .join(Part, PartInstance.part_id == Part.id) \
+        .join(Company, PartInstance.company_id == Company.id) \
+        .outerjoin(ShipmentItem, PartInstance.id == ShipmentItem.part_instance_id) \
+        .outerjoin(Shipment, ShipmentItem.shipment_id == Shipment.id) \
+        .outerjoin(Request, Shipment.request_id == Request.id) \
+        .outerjoin(User, Request.requester_id == User.id) \
+        .outerjoin(Location, Request.location_id == Location.id) \
+        .filter(PartInstance.company_id == company_id)
+
+    # Filtrar por período de criação
+    if start_date and end_date:
+        query = query.filter(PartInstance.created_at.between(start_date, end_date))
+
+    # Filtrar por peça específica
+    if part_id:
+        query = query.filter(Part.id == part_id)
+
+    # Filtrar por status específico
+    if status:
+        query = query.filter(PartInstance.status == status)
+
+    results = query.order_by(PartInstance.created_at.desc()).all()
+
+    headers = [
+        'ID Instância', 'Código Único', 'Nome Peça', 'Código Peça', 'Status',
+        'Data Criação', 'Data Envio', 'Data Recebimento', 'Garantia Expira',
+        'Empresa', 'ID Solicitação', 'Solicitante', 'Local Destino',
+        'Código Rastreamento', 'Tempo em Trânsito (dias)'
+    ]
+
+    data = []
+    for row in results:
+        # Calcular tempo em trânsito
+        tempo_transito = ''
+        if row.Data_Envio and row.Data_Recebimento:
+            delta = row.Data_Recebimento - row.Data_Envio
+            tempo_transito = str(delta.days)
+        elif row.Data_Envio and not row.Data_Recebimento and row.Status == 'enviado':
+            delta = datetime.utcnow() - row.Data_Envio
+            tempo_transito = f"{delta.days} (em trânsito)"
+
+        data.append([
+            row.ID_Instancia,
+            row.Codigo_Unico,
+            row.Nome_Peca,
+            row.Codigo_Peca or '',
+            row.Status.upper(),
+            row.Data_Criacao.strftime('%d/%m/%Y %H:%M') if row.Data_Criacao else '',
+            row.Data_Envio.strftime('%d/%m/%Y %H:%M') if row.Data_Envio else '',
+            row.Data_Recebimento.strftime('%d/%m/%Y %H:%M') if row.Data_Recebimento else '',
+            row.Garantia_Expira.strftime('%d/%m/%Y') if row.Garantia_Expira else '',
+            row.Empresa,
+            row.ID_Solicitacao or '',
+            row.Solicitante or '',
+            row.Local_Destino or '',
+            row.Codigo_Rastreamento or '',
+            tempo_transito
+        ])
+
+    return data, headers
+
+
+def get_summary_export(company_id, start_date, end_date):
+    """Relatório resumo para exportação"""
+    summary_data = get_summary_report(company_id, start_date, end_date)
+
+    # Dados gerais
+    data = [
+        ['RESUMO GERAL', ''],
+        ['Total de Solicitações', summary_data['total_requests']],
+        ['', ''],
+        ['SOLICITAÇÕES POR STATUS', '']
+    ]
+
+    for status, count in summary_data['status_data']:
+        data.append([status.title(), count])
+
+    data.extend([
+        ['', ''],
+        ['PEÇAS MAIS SOLICITADAS', 'QUANTIDADE']
+    ])
+
+    for part_name, total in summary_data['most_requested']:
+        data.append([part_name, total])
+
+    data.extend([
+        ['', ''],
+        ['SOLICITANTES MAIS ATIVOS', 'TOTAL SOLICITAÇÕES']
+    ])
+
+    for username, total in summary_data['top_requesters']:
+        data.append([username, total])
+
+    headers = ['Descrição', 'Valor']
+    return data, headers
+
+
+def export_to_csv(data, headers, filename_base):
+    """Exportar dados para CSV"""
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # Escrever cabeçalhos
+    writer.writerow(headers)
+
+    # Escrever dados
+    for row in data:
+        writer.writerow(row)
+
+    # Preparar resposta
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+    response.headers['Content-Disposition'] = f'attachment; filename="{filename_base}.csv"'
+
+    return response
+
+
+def export_to_pdf(data, headers, filename_base, company, start_date, end_date, report_type):
+    """Exportar dados para PDF"""
+    # Criar arquivo temporário
+    temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+
+    # Configurar documento
+    doc = SimpleDocTemplate(temp_file.name, pagesize=landscape(A4))
+    styles = getSampleStyleSheet()
+
+    # Elementos do documento
+    elements = []
+
+    # Título
+    title_style = styles['Title']
+    title = Paragraph(f"Relatório - {report_type.replace('_', ' ').title()}", title_style)
+    elements.append(title)
+    elements.append(Spacer(1, 12))
+
+    # Informações do cabeçalho
+    header_style = styles['Normal']
+    header_info = [
+        f"Empresa: {company.name}",
+        f"Período: {start_date} a {end_date}",
+        f"Gerado em: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        f"Total de registros: {len(data)}"
+    ]
+
+    for info in header_info:
+        elements.append(Paragraph(info, header_style))
+
+    elements.append(Spacer(1, 20))
+
+    # Tabela de dados
+    if data:
+        # Preparar dados da tabela
+        table_data = [headers] + data
+
+        # Ajustar largura das colunas
+        col_widths = [100] * len(headers)  # Largura padrão
+
+        # Criar tabela
+        table = Table(table_data, colWidths=col_widths)
+        table.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+            ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+            ('FONTSIZE', (0, 1), (-1, -1), 7),
+            ('GRID', (0, 0), (-1, -1), 1, colors.black)
+        ]))
+
+        elements.append(table)
+    else:
+        elements.append(Paragraph("Nenhum dado encontrado para os filtros aplicados.", styles['Normal']))
+
+    # Gerar PDF
+    doc.build(elements)
+    temp_file.close()
+
+    # Retornar arquivo
+    return send_file(temp_file.name, as_attachment=True, download_name=f"{filename_base}.pdf")
+
 @app.route('/admin/system-info')
 @login_required
 @role_required('master')

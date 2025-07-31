@@ -8,11 +8,18 @@
     <div class="btn-toolbar mb-2 mb-md-0">
         {% if report_data %}
         <div class="btn-group me-2">
-            <a href="{{ url_for('export_report', company_id=current_company_id, start_date=start_date, end_date=end_date, report_type=report_type, format='csv') }}"
+            <button id="previewBtn" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-eye"></i> Preview
+            </button>
+            <a href="{{ url_for('export_report', company_id=current_company_id, start_date=start_date, end_date=end_date, report_type=report_type, format='csv',
+                part_id=request.args.get('part_id', ''), user_id=request.args.get('user_id', ''),
+                location_id=request.args.get('location_id', ''), status=request.args.get('status', '')) }}"
                class="btn btn-outline-success btn-sm">
                 <i class="bi bi-filetype-csv"></i> Exportar CSV
             </a>
-            <a href="{{ url_for('export_report', company_id=current_company_id, start_date=start_date, end_date=end_date, report_type=report_type, format='pdf') }}"
+            <a href="{{ url_for('export_report', company_id=current_company_id, start_date=start_date, end_date=end_date, report_type=report_type, format='pdf',
+                part_id=request.args.get('part_id', ''), user_id=request.args.get('user_id', ''),
+                location_id=request.args.get('location_id', ''), status=request.args.get('status', '')) }}"
                class="btn btn-outline-danger btn-sm">
                 <i class="bi bi-filetype-pdf"></i> Exportar PDF
             </a>
@@ -29,10 +36,10 @@
         </h5>
     </div>
     <div class="card-body">
-        <form method="GET" class="row g-3">
+        <form method="GET" class="row g-3" id="reportForm">
             {% if current_user.role == 'master' %}
             <div class="col-md-3">
-                <label for="company_id" class="form-label">Empresa</label>
+                <label for="company_id" class="form-label">Empresa *</label>
                 <select name="company_id" id="company_id" class="form-select" required>
                     <option value="">Selecione a empresa</option>
                     {% for company in companies %}
@@ -42,16 +49,18 @@
                     {% endfor %}
                 </select>
             </div>
+            {% else %}
+            <input type="hidden" name="company_id" value="{{ current_user.company_id }}">
             {% endif %}
 
             <div class="col-md-2">
-                <label for="start_date" class="form-label">Data Início</label>
+                <label for="start_date" class="form-label">Data Início *</label>
                 <input type="date" name="start_date" id="start_date" class="form-control"
                        value="{{ start_date }}" required>
             </div>
 
             <div class="col-md-2">
-                <label for="end_date" class="form-label">Data Fim</label>
+                <label for="end_date" class="form-label">Data Fim *</label>
                 <input type="date" name="end_date" id="end_date" class="form-control"
                        value="{{ end_date }}" required>
             </div>
@@ -60,10 +69,11 @@
                 <label for="report_type" class="form-label">Tipo de Relatório</label>
                 <select name="report_type" id="report_type" class="form-select">
                     <option value="summary" {{ 'selected' if report_type == 'summary' else '' }}>Resumo Geral</option>
-                    <option value="requests_by_requester" {{ 'selected' if report_type == 'requests_by_requester' else '' }}>Por Solicitante</option>
-                    <option value="requests_by_location" {{ 'selected' if report_type == 'requests_by_location' else '' }}>Por Local</option>
+                    <option value="detailed_requests" {{ 'selected' if report_type == 'detailed_requests' else '' }}>Solicitações Detalhadas</option>
                     <option value="parts_movement" {{ 'selected' if report_type == 'parts_movement' else '' }}>Movimentação de Peças</option>
-                    <option value="stock_status" {{ 'selected' if report_type == 'stock_status' else '' }}>Status do Estoque</option>
+                    <option value="user_activity" {{ 'selected' if report_type == 'user_activity' else '' }}>Atividade de Usuários</option>
+                    <option value="stock_detailed" {{ 'selected' if report_type == 'stock_detailed' else '' }}>Estoque Detalhado</option>
+                    <option value="instances_tracking" {{ 'selected' if report_type == 'instances_tracking' else '' }}>Rastreamento de Instâncias</option>
                 </select>
             </div>
 
@@ -75,7 +85,79 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Filtros Adicionais -->
+            <div class="col-12">
+                <div class="row g-3" id="additionalFilters" style="display: none;">
+                    <div class="col-md-3">
+                        <label for="part_id" class="form-label">Filtrar por Peça</label>
+                        <select name="part_id" id="part_id" class="form-select">
+                            <option value="">Todas as peças</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="user_id" class="form-label">Filtrar por Usuário</label>
+                        <select name="user_id" id="user_id" class="form-select">
+                            <option value="">Todos os usuários</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="location_id" class="form-label">Filtrar por Local</label>
+                        <select name="location_id" id="location_id" class="form-select">
+                            <option value="">Todos os locais</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label for="status" class="form-label">Filtrar por Status</label>
+                        <select name="status" id="status" class="form-select">
+                            <option value="">Todos os status</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <button type="button" id="toggleFilters" class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-plus-circle"></i> Mostrar Filtros Avançados
+                    </button>
+                    <button type="button" id="clearFilters" class="btn btn-outline-warning btn-sm">
+                        <i class="bi bi-x-circle"></i> Limpar Filtros
+                    </button>
+                </div>
+            </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal de Preview -->
+<div class="modal fade" id="previewModal" tabindex="-1" aria-labelledby="previewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="previewModalLabel">Preview do Relatório</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="previewContent">
+                    <div class="text-center">
+                        <div class="spinner-border" role="status">
+                            <span class="visually-hidden">Carregando...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+                <button type="button" class="btn btn-success" onclick="exportCSV()">
+                    <i class="bi bi-filetype-csv"></i> Exportar CSV
+                </button>
+                <button type="button" class="btn btn-danger" onclick="exportPDF()">
+                    <i class="bi bi-filetype-pdf"></i> Exportar PDF
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -85,7 +167,7 @@
     {% if report_type == 'summary' %}
     <!-- Resumo Geral -->
     <div class="col-md-3 mb-4">
-        <div class="card bg-primary text-white">
+        <div class="card bg-primary text-white h-100">
             <div class="card-body">
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
@@ -106,23 +188,23 @@
 
     <!-- Status das Solicitações -->
     <div class="col-md-9 mb-4">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header">
                 <h6 class="card-title mb-0">Solicitações por Status</h6>
             </div>
             <div class="card-body">
                 <div class="row">
                     {% for status, count in report_data.status_data %}
-                    <div class="col-md-4 mb-2">
+                    <div class="col-md-3 mb-2">
                         <span class="badge
                             {% if status == 'pendente' %}bg-warning
                             {% elif status == 'enviado' %}bg-info
                             {% elif status == 'recebido' %}bg-success
                             {% else %}bg-secondary
-                            {% endif %} me-2">
+                            {% endif %} me-2 fs-6">
                             {{ status|title }}
                         </span>
-                        <strong>{{ count }}</strong>
+                        <strong class="fs-5">{{ count }}</strong>
                     </div>
                     {% endfor %}
                 </div>
@@ -132,24 +214,26 @@
 
     <!-- Peças Mais Solicitadas -->
     <div class="col-md-6 mb-4">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header">
-                <h6 class="card-title mb-0">Peças Mais Solicitadas</h6>
+                <h6 class="card-title mb-0">Top 10 Peças Mais Solicitadas</h6>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
                             <tr>
                                 <th>Peça</th>
-                                <th>Quantidade</th>
+                                <th class="text-center">Quantidade</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for part_name, total in report_data.most_requested %}
                             <tr>
                                 <td>{{ part_name }}</td>
-                                <td><span class="badge bg-primary">{{ total }}</span></td>
+                                <td class="text-center">
+                                    <span class="badge bg-primary fs-6">{{ total }}</span>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -161,24 +245,26 @@
 
     <!-- Solicitantes Mais Ativos -->
     <div class="col-md-6 mb-4">
-        <div class="card">
+        <div class="card h-100">
             <div class="card-header">
-                <h6 class="card-title mb-0">Solicitantes Mais Ativos</h6>
+                <h6 class="card-title mb-0">Top 10 Solicitantes Mais Ativos</h6>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
+                    <table class="table table-sm table-hover">
+                        <thead class="table-light">
                             <tr>
                                 <th>Usuário</th>
-                                <th>Solicitações</th>
+                                <th class="text-center">Solicitações</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for username, total in report_data.top_requesters %}
                             <tr>
                                 <td>{{ username }}</td>
-                                <td><span class="badge bg-info">{{ total }}</span></td>
+                                <td class="text-center">
+                                    <span class="badge bg-info fs-6">{{ total }}</span>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -194,17 +280,24 @@
         <div class="card">
             <div class="card-header">
                 <h6 class="card-title mb-0">
-                    {% if report_type == 'requests_by_requester' %}Relatório por Solicitante
+                    {% if report_type == 'detailed_requests' %}Relatório Detalhado de Solicitações
+                    {% elif report_type == 'requests_by_requester' %}Relatório por Solicitante
                     {% elif report_type == 'requests_by_location' %}Relatório por Local
                     {% elif report_type == 'parts_movement' %}Movimentação de Peças
+                    {% elif report_type == 'user_activity' %}Atividade de Usuários
+                    {% elif report_type == 'stock_detailed' %}Estoque Detalhado
+                    {% elif report_type == 'instances_tracking' %}Rastreamento de Instâncias
                     {% elif report_type == 'stock_status' %}Status do Estoque
                     {% endif %}
                 </h6>
+                <small class="text-muted">
+                    Mostrando {{ report_data|length }} registros
+                </small>
             </div>
             <div class="card-body">
                 <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
+                    <table class="table table-hover table-sm">
+                        <thead class="table-dark">
                             <tr>
                                 {% if report_type == 'requests_by_requester' %}
                                 <th>Usuário</th>
@@ -231,15 +324,32 @@
                                 <th>Instâncias</th>
                                 <th>Disponível</th>
                                 <th>Enviado</th>
+                                {% else %}
+                                <!-- Headers dinâmicos para outros relatórios -->
+                                <th>Dados</th>
                                 {% endif %}
                             </tr>
                         </thead>
                         <tbody>
                             {% for row in report_data %}
                             <tr>
-                                {% for value in row %}
-                                <td>{{ value or '-' }}</td>
-                                {% endfor %}
+                                {% if row is iterable and row is not string %}
+                                    {% for value in row %}
+                                    <td>
+                                        {% if value is number %}
+                                            {% if value == 0 %}
+                                                <span class="text-muted">0</span>
+                                            {% else %}
+                                                <strong>{{ value }}</strong>
+                                            {% endif %}
+                                        {% else %}
+                                            {{ value or '-' }}
+                                        {% endif %}
+                                    </td>
+                                    {% endfor %}
+                                {% else %}
+                                    <td>{{ row or '-' }}</td>
+                                {% endif %}
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -250,11 +360,29 @@
     </div>
     {% endif %}
 </div>
+{% else %}
+<!-- Sem dados -->
+<div class="col-12">
+    <div class="alert alert-info" role="alert">
+        <h4 class="alert-heading">
+            <i class="bi bi-info-circle"></i> Nenhum relatório gerado
+        </h4>
+        <p>Selecione os filtros acima e clique em "Gerar" para visualizar os dados.</p>
+        <hr>
+        <p class="mb-0">
+            <strong>Dica:</strong> Para relatórios mais específicos, utilize os filtros avançados para filtrar por peça, usuário, local ou status.
+        </p>
+    </div>
+</div>
 {% endif %}
 
 <script>
-// Auto-ajustar data fim para hoje se não definida
+// Variáveis globais para controle
+let filtersVisible = false;
+let currentCompanyId = {% if current_user.role == 'master' %}null{% else %}{{ current_user.company_id }}{% endif %};
+
 document.addEventListener('DOMContentLoaded', function() {
+    // Auto-ajustar datas se não definidas
     const startDate = document.getElementById('start_date');
     const endDate = document.getElementById('end_date');
 
@@ -267,6 +395,243 @@ document.addEventListener('DOMContentLoaded', function() {
         lastMonth.setMonth(lastMonth.getMonth() - 1);
         startDate.value = lastMonth.toISOString().split('T')[0];
     }
+
+    // Restaurar valores dos filtros da URL
+    restoreFilterValues();
+
+    // Event listeners
+    document.getElementById('toggleFilters').addEventListener('click', toggleAdditionalFilters);
+    document.getElementById('clearFilters').addEventListener('click', clearAllFilters);
+
+    {% if current_user.role == 'master' %}
+    document.getElementById('company_id').addEventListener('change', function() {
+        currentCompanyId = this.value;
+        if (currentCompanyId) {
+            loadFilterOptions(currentCompanyId);
+        }
+    });
+
+    // Carregar filtros se empresa já selecionada
+    if (currentCompanyId) {
+        loadFilterOptions(currentCompanyId);
+    }
+    {% else %}
+    // Para não-master, carregar filtros automaticamente
+    loadFilterOptions({{ current_user.company_id }});
+    {% endif %}
+
+    // Preview button
+    {% if report_data %}
+    document.getElementById('previewBtn').addEventListener('click', showPreview);
+    {% endif %}
 });
+
+function toggleAdditionalFilters() {
+    const filters = document.getElementById('additionalFilters');
+    const button = document.getElementById('toggleFilters');
+    const icon = button.querySelector('i');
+
+    if (filtersVisible) {
+        filters.style.display = 'none';
+        button.innerHTML = '<i class="bi bi-plus-circle"></i> Mostrar Filtros Avançados';
+        filtersVisible = false;
+    } else {
+        filters.style.display = 'block';
+        button.innerHTML = '<i class="bi bi-dash-circle"></i> Ocultar Filtros Avançados';
+        filtersVisible = true;
+    }
+}
+
+function clearAllFilters() {
+    document.getElementById('part_id').value = '';
+    document.getElementById('user_id').value = '';
+    document.getElementById('location_id').value = '';
+    document.getElementById('status').value = '';
+}
+
+function restoreFilterValues() {
+    const urlParams = new URLSearchParams(window.location.search);
+
+    ['part_id', 'user_id', 'location_id', 'status'].forEach(param => {
+        const value = urlParams.get(param);
+        if (value) {
+            const element = document.getElementById(param);
+            if (element) element.value = value;
+
+            // Mostrar filtros se algum estiver preenchido
+            if (!filtersVisible) {
+                toggleAdditionalFilters();
+            }
+        }
+    });
+}
+
+function loadFilterOptions(companyId) {
+    if (!companyId) return;
+
+    fetch(`/api/reports/filters/${companyId}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Carregar usuários
+                const userSelect = document.getElementById('user_id');
+                userSelect.innerHTML = '<option value="">Todos os usuários</option>';
+                data.filters.users.forEach(user => {
+                    userSelect.innerHTML += `<option value="${user.id}">${user.name} (${user.email})</option>`;
+                });
+
+                // Carregar peças
+                const partSelect = document.getElementById('part_id');
+                partSelect.innerHTML = '<option value="">Todas as peças</option>';
+                data.filters.parts.forEach(part => {
+                    partSelect.innerHTML += `<option value="${part.id}">${part.name} ${part.category ? '(' + part.category + ')' : ''}</option>`;
+                });
+
+                // Carregar locais
+                const locationSelect = document.getElementById('location_id');
+                locationSelect.innerHTML = '<option value="">Todos os locais</option>';
+                data.filters.locations.forEach(location => {
+                    locationSelect.innerHTML += `<option value="${location.id}">${location.name}</option>`;
+                });
+
+                // Carregar status
+                const statusSelect = document.getElementById('status');
+                statusSelect.innerHTML = '<option value="">Todos os status</option>';
+                data.filters.statuses.forEach(status => {
+                    statusSelect.innerHTML += `<option value="${status.value}">${status.label}</option>`;
+                });
+
+                // Restaurar valores após carregar opções
+                restoreFilterValues();
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao carregar filtros:', error);
+        });
+}
+
+function showPreview() {
+    const form = document.getElementById('reportForm');
+    const formData = new FormData(form);
+    const params = new URLSearchParams(formData);
+
+    document.getElementById('previewContent').innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Carregando preview...</span>
+            </div>
+        </div>
+    `;
+
+    const modal = new bootstrap.Modal(document.getElementById('previewModal'));
+    modal.show();
+
+    fetch(`/api/reports/preview?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayPreview(data.preview);
+            } else {
+                document.getElementById('previewContent').innerHTML = `
+                    <div class="alert alert-danger">
+                        <h5>Erro ao gerar preview</h5>
+                        <p>${data.message}</p>
+                    </div>
+                `;
+            }
+        })
+        .catch(error => {
+            document.getElementById('previewContent').innerHTML = `
+                <div class="alert alert-danger">
+                    <h5>Erro de conexão</h5>
+                    <p>Não foi possível carregar o preview do relatório.</p>
+                </div>
+            `;
+        });
+}
+
+function displayPreview(preview) {
+    let html = `
+        <div class="alert alert-info">
+            <strong>Total de registros:</strong> ${preview.total_records}
+            ${preview.has_more ? ' (mostrando apenas os primeiros 100)' : ''}
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm table-striped">
+                <thead class="table-dark">
+                    <tr>
+    `;
+
+    preview.headers.forEach(header => {
+        html += `<th>${header}</th>`;
+    });
+
+    html += `</tr></thead><tbody>`;
+
+    preview.data.forEach(row => {
+        html += '<tr>';
+        row.forEach(cell => {
+            html += `<td>${cell || '-'}</td>`;
+        });
+        html += '</tr>';
+    });
+
+    html += '</tbody></table></div>';
+
+    document.getElementById('previewContent').innerHTML = html;
+}
+
+function exportCSV() {
+    const form = document.getElementById('reportForm');
+    const formData = new FormData(form);
+    formData.append('format', 'csv');
+
+    const params = new URLSearchParams(formData);
+    window.location.href = `/reports/export?${params}`;
+}
+
+function exportPDF() {
+    const form = document.getElementById('reportForm');
+    const formData = new FormData(form);
+    formData.append('format', 'pdf');
+
+    const params = new URLSearchParams(formData);
+    window.location.href = `/reports/export?${params}`;
+}
 </script>
+
+<style>
+.badge.fs-6 {
+    font-size: 0.875rem !important;
+}
+
+.card h-100 {
+    height: 100%;
+}
+
+.table th {
+    white-space: nowrap;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+#additionalFilters {
+    background-color: #f8f9fa;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    margin-top: 10px;
+}
+
+.modal-xl .table {
+    font-size: 0.8rem;
+}
+
+.modal-xl .table th,
+.modal-xl .table td {
+    padding: 0.3rem;
+}
+</style>
 {% endblock %}
